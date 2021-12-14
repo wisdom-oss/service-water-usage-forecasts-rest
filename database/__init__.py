@@ -13,7 +13,17 @@ __db_engine = create_engine(
 )
 
 # Create a Database Session used later on in the api
-DatabaseSession = sessionmaker(autocommit=False, autoflush=False, bind=__db_engine)
+__DatabaseSession = sessionmaker(autocommit=False, autoflush=False, bind=__db_engine)
 
-# Create a declarative base for the orm table objects
-TableBase = declarative_base()
+
+def get_database_session() -> __DatabaseSession:
+    """Get an opened Database session which can be used to query data
+
+        :return: Database Session
+        :rtype: DatabaseSession
+        """
+    db = __DatabaseSession()
+    try:
+        yield db
+    finally:
+        db.close()
