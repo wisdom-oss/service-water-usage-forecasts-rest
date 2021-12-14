@@ -3,7 +3,7 @@ from pydantic import BaseSettings, Field, stricturl
 
 
 class ServiceSettings(BaseSettings):
-    database_url: stricturl(tld_required=False, allowed_schemes={"mariadb+pymysql"}) = Field(
+    database_dsn: stricturl(tld_required=False, allowed_schemes={"mariadb+pymysql"}) = Field(
         default=...,
         env='DATABASE_DSN'
     )
@@ -11,7 +11,7 @@ class ServiceSettings(BaseSettings):
 
     service_registry_url: str = Field(
         default=...,
-        env='SERVICE_REGISTRY_HOST'
+        env='SERVICE_REGISTRY_URL'
     )
     """URL Pointing to the Eureka Server installation of this instance"""
 
