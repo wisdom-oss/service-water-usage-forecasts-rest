@@ -1,3 +1,8 @@
 SQLAlchemy==1.4.28
 pymysql==1.0.2
 pydantic==1.8.2
+fastapi==0.70.1
+hypercorn==0.13.1
+py-eureka-client==0.10.0
+starlette==0.17.1
+pika==1.2.0
