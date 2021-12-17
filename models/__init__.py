@@ -20,3 +20,9 @@ class ServiceSettings(BaseSettings):
         env="AMQP_URL"
     )
     """URL containing the credentials and address of the message broker"""
+
+    amqp_exchange: str = Field(
+        default='weather-forecast-requests',
+        env="AMQP_EXCHANGE"
+    )
+    """Name of the exchange in which messages will be published"""
