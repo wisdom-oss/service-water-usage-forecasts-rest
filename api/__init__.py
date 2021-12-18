@@ -94,7 +94,7 @@ async def run_prognosis(
         spatial_unit: SpatialUnit,
         district: str,
         forecast_type: ForecastType,
-        consumer_group: List[ConsumerGroup] = Query([ConsumerGroup.ALL], alias='consumerGroup'),
+        consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'),
         db_connection: Session = Depends(database.get_database_session)
 ):
     __logger.info(
@@ -109,9 +109,8 @@ async def run_prognosis(
             "The district '{}' was not found in the spatial unit '{}'. Please check your "
             'query'.format(district, spatial_unit)
         )
-    # Check if a correlation id in form of the request id was already created. If not create a
-    # new internal one
-    __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection)
+    # Get the water usage data
+    __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
     _request = ForecastRequest(
         time_period_start=__water_usage_data.time_period_start,
         time_period_end=__water_usage_data.time_period_end,
