@@ -53,7 +53,7 @@ class ForecastRequest(RealData):
         default=...,
         alias='forecastType'
     )
-    consumer_group: List[ConsumerGroup] = Field(
+    consumer_group: ConsumerGroup = Field(
         default=...,
         alias='consumerGroup'
     )
