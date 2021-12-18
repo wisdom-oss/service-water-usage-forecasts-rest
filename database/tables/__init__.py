@@ -21,6 +21,14 @@ class Commune(TableBase):
     in_county = Column(Integer, ForeignKey("county.id"))
 
 
+class ConsumerType(TableBase):
+    __tablename__ = "consumer_types"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String, unique=True)
+    type = Column(String, unique=True)
+
+
 class WaterUsageAmount(TableBase):
     """Class describing the layout of the database table storing the water usage amounts"""
     __tablename__ = "usage_values"
