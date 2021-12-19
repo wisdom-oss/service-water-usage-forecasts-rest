@@ -35,6 +35,6 @@ class WaterUsageAmount(TableBase):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     commune = Column(Integer, ForeignKey("commune.id"))
-    consumer_type = Column(String)
+    consumer_type = Column(Integer)
     value = Column(Float)
     year = Column(Integer)

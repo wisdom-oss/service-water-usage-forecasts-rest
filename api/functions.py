@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import functions as func
 
 import database
-from database.tables import Commune, ConsumerType, County, WaterUsageAmount, operations
+from database.tables import Commune, County, WaterUsageAmount, operations
 from models.requests import RealData
 from models.requests.enums import ConsumerGroup, SpatialUnit
 
@@ -76,7 +76,7 @@ def get_water_usage_data(
             .group_by(WaterUsageAmount.year) \
             .filter(
                 WaterUsageAmount.commune == __commune_filter_value,
-                WaterUsageAmount.consumer_type == __consumer_group_filter_value
+                WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
             ).all()
         # Iterate through the paired valued to receive the usage amounts
         __usage_amounts = []
@@ -93,9 +93,13 @@ def get_water_usage_data(
         print(_communes)
         _data = {}
         for commune_id in _communes:
-            _usages_with_years = db.query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value))\
-                                   .group_by(WaterUsageAmount.year)\
-                                   .filter(WaterUsageAmount.commune == commune_id).all()
+            _usages_with_years = db\
+                .query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value))\
+                .group_by(WaterUsageAmount.year)\
+                .filter(
+                        WaterUsageAmount.commune == commune_id,
+                        WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
+                ).all()
             _years = []
             _usage_amounts = []
             for usage_with_year in _usages_with_years:
