@@ -44,3 +44,29 @@ def get_communes_in_county(county: str, db) -> List[int]:
     for commune in _commune_objs:
         _commune_ids.append(commune.id)
     return _commune_ids
+
+
+def get_commune_names(db: Session) -> List[str]:
+    """Get all names of the communes in the database
+
+    :param db:
+    :return:
+    """
+    _communes: List[Commune] = db.query(Commune).all()
+    names = []
+    for _commune in _communes:
+        names.append(_commune.name)
+    return names
+
+
+def get_county_names(db: Session) -> List[str]:
+    """Get the names of all available counties
+
+    :param db:
+    :return:
+    """
+    _counties: List[County] = db.query(County).all()
+    names = []
+    for _county in _counties:
+        names.append(_county.name)
+    return names
