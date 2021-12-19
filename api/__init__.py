@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 import database
 from api.exceptions import QueryDataError
 from api.functions import district_in_spatial_unit, get_water_usage_data
+from database.tables.operations import get_commune_names, get_county_names
 from messaging import AMQPRPCClient
 from models import ServiceSettings
 from models.requests import ForecastRequest
@@ -81,7 +82,7 @@ async def query_data_error_handler(_request: Request, exc: QueryDataError):
     return JSONResponse(
         status_code=400,
         content={
-            "error": exc.short_error,
+            "error":             exc.short_error,
             "error_description": exc.error_description
         }
     )
@@ -125,3 +126,20 @@ async def run_prognosis(
         sleep(0.1)
 
     return json.loads(__amqp_client.responses[__msg_id])
+
+
+# Route for getting information about the possible parameters
+@water_usage_forecasts_rest.get('/')
+async def get_available_parameters(db: Session = Depends(database.get_database_session)):
+    """Get all possible parameters
+
+    :param db:
+    :return:
+    """
+    response = {
+        "communes": get_commune_names(db),
+        "counties": get_county_names(db),
+        "consumerGroups": list(ConsumerGroup.__members__.values()),
+        "forecastTypes": list(ForecastType.__members__.values())
+    }
+    return response
