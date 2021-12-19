@@ -2,7 +2,7 @@
 import json
 import logging
 from time import sleep
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import Depends, FastAPI, Query
 from fastapi.exceptions import RequestValidationError
