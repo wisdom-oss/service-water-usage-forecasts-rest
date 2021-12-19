@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: WISdoM OSS - Water Usage Forecasts
+  version: "0.1"
+
+components:
+  schemas:
+    ForecastType:
+      type: string
+      enum:
+        - logarithmic
+        - linear
+        - polynomial
+    ConsumerGroup:
+      type: string
+      enum:
+        - businesses
+        - households_and_small_businesses
+        - farming_forestry_fishing_industry
+        - public_institutions
+        - all
+      default: all
+
+paths:
+  /:
+    get:
+      summary: Get the communes, counties, consumer tpyes and forecast types available currently
+      responses:
+        200:
+          description: The data is available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  communes:
+                    description: Name of the communes available for water usage forecast requests
+                    type: array
+                    items:
+                      type: string
+                  counties:
+                    description: Name of the counties available for water usage requests
+                    type: array
+                    items:
+                      type: string
+                  consumerGroups:
+                    description: NAmes of the consumer groups available for filtering the complete usage data
+                    type: array
+                    items:
+                      type: string
+                  forecastTypes:
+                    description: Names of the forecast types available
+                    type: array
+                    items:
+                      type: string
+
+  /{spatialUnit}/{district}/{forecastModel}:
+    get:
+      summary: Run a new Prognosis and get the data of it
+      parameters:
+        - in: path
+          name: spatialUnit
+          required: true
+          schema:
+            type: string
+            enum:
+              - commune
+              - county
+        - in: path
+          name: district
+          required: true
+          description: District of the spatial Unit for which the forecast should be run
+          schema:
+            type: string
+        - in: path
+          name: forecastModel
+          required: true
+          description: Type of regression model which shall be used
+          schema:
+            type: string
+            enum:
+              - logarithmic
+              - linear
+              - polynomial
+        - in: query
+          name: consumerGroup
+          required: false
+          description: Consumer Group for which the forecast is run
+
+          schema:
+            $ref: '#/components/schemas/ConsumerGroup'
+      responses:
+        200:
+          description: The forecast was run successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  forecastType:
+                    $ref: '#/components/schemas/ForecastType'
+                  consumerGroup:
+                    $ref: '#/components/schemas/ConsumerGroup'
+                  reference:
+                    type: object
+                    properties:
+                      start:
+                        type: integer
+                        description: Year from which the first real data water usage is taken from
+                      end:
+                        type: integer
+                        description: Last year included in the water usage data
+                      usageAmounts:
+                        type: array
+                        items:
+                          type: number
+                  forecast:
+                    type: object
+                    properties:
+                      start:
+                        type: integer
+                        description: Year in wich the forecast starts being predicted (01.01.)
+                      timePeriod:
+                        type: integer
+                        description: Years in the forecast
+                      equation:
+                        type: string
+                        description: Equation used to predict the forecast values
+                      score:
+                        type: number
+                        description: Coefficient of determination for matching the real data with the equation
+                      usageAmounts:
+                        type: array
+                        description: Predicted water usage amounts
+                        minLength: 10
+                        maxLength: 10
+                        items:
+                          type: number
+
