@@ -22,6 +22,38 @@ components:
       default: all
 
 paths:
+  /:
+    get:
+      summary: Get the communes, counties, consumer tpyes and forecast types available currently
+      responses:
+        200:
+          description: The data is available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  communes:
+                    description: Name of the communes available for water usage forecast requests
+                    type: array
+                    items:
+                      type: string
+                  counties:
+                    description: Name of the counties available for water usage requests
+                    type: array
+                    items:
+                      type: string
+                  consumerGroups:
+                    description: NAmes of the consumer groups available for filtering the complete usage data
+                    type: array
+                    items:
+                      type: string
+                  forecastTypes:
+                    description: Names of the forecast types available
+                    type: array
+                    items:
+                      type: string
+
   /{spatialUnit}/{district}/{forecastModel}:
     get:
       summary: Run a new Prognosis and get the data of it
