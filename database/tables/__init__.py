@@ -9,7 +9,7 @@ class County(TableBase):
     __tablename__ = "counties"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True)
+    name = Column(String(255), unique=True)
 
 
 class Commune(TableBase):
@@ -17,16 +17,16 @@ class Commune(TableBase):
     __tablename__ = "communes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True)
-    in_county = Column(Integer, ForeignKey("county.id"))
+    name = Column(String(255), unique=True)
+    in_county = Column(Integer, ForeignKey("counties.id"))
 
 
 class ConsumerType(TableBase):
     __tablename__ = "consumer_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String, unique=True)
-    type = Column(String, unique=True)
+    title = Column(String(255), unique=True)
+    type = Column(String(255), unique=True)
 
 
 class WaterUsageAmount(TableBase):
@@ -34,7 +34,7 @@ class WaterUsageAmount(TableBase):
     __tablename__ = "usage_values"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    commune = Column(Integer, ForeignKey("commune.id"))
+    commune = Column(Integer, ForeignKey("communes.id"))
     consumer_type = Column(Integer)
     value = Column(Float)
     year = Column(Integer)

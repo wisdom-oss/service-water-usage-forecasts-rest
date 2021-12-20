@@ -2,6 +2,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy_utils.functions import database_exists, create_database
 from models import ServiceSettings
 
 # Read the configuration of the service
@@ -20,6 +21,8 @@ TableBase = declarative_base()
 
 def initialise_orm_models():
     """Initialize the ORM models and create the necessary metadata"""
+    if not database_exists(service_config.database_dsn):
+        create_database(service_config.database_dsn)
     TableBase.metadata.create_all(bind=__db_engine)
 
 
