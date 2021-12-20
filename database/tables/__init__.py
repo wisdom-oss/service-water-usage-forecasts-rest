@@ -1,5 +1,5 @@
 """Module for describing the Tables used in the database accesses"""
-from sqlalchemy import Column, ForeignKey, Integer, String, Float
+from sqlalchemy import Column, Float, ForeignKey, Integer, String
 
 from .. import TableBase
 
@@ -18,7 +18,7 @@ class Commune(TableBase):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), unique=True)
-    in_county = Column(Integer, ForeignKey("counties.id"))
+    in_county = Column(Integer, ForeignKey("counties.id", onupdate='CASCADE', ondelete='CASCADE'))
 
 
 class ConsumerType(TableBase):
@@ -34,7 +34,7 @@ class WaterUsageAmount(TableBase):
     __tablename__ = "usage_values"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    commune = Column(Integer, ForeignKey("communes.id"))
+    commune = Column(Integer, ForeignKey("communes.id", onupdate='CASCADE', ondelete='CASCADE'))
     consumer_type = Column(Integer)
     value = Column(Float)
     year = Column(Integer)
