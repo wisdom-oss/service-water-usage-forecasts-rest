@@ -1,3 +1,4 @@
+"""Models for the incoming requests"""
 from typing import List
 
 from pydantic import BaseModel, Field, root_validator
@@ -23,11 +24,18 @@ class RealData(BaseModel):
     )
 
     class Config:
+        """Configuration for the RealData model"""
         allow_population_by_field_name = True
         allow_population_by_alias = True
 
     @root_validator
     def check_data_consistency(cls, values):
+        """Pydantic validator which will check for the consistency between the given time period
+        and the supplied usage amounts
+
+        :param values:
+        :return:
+        """
         time_period_start = values.get("time_period_start")
         time_period_end = values.get("time_period_end")
         water_usage_amounts = values.get("water_usage_amounts")
@@ -49,6 +57,9 @@ class RealData(BaseModel):
 
 
 class ForecastRequest(RealData):
+    """
+    Model for describing the incoming forecast request, which will be used to build the amqp message
+    """
     forecast_type: ForecastType = Field(
         default=...,
         alias='forecastType'

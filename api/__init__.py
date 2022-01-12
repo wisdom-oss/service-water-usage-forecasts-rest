@@ -35,6 +35,14 @@ __amqp_client: Optional[AMQPRPCClient] = None
 # Create a handler for the startup process
 @water_usage_forecasts_rest.on_event('startup')
 async def startup():
+    """Startup Event Handler
+
+    This event handler will automatically register this service at the service registry,
+    create the necessary databases and tables and will start a rpc client which will send
+    messages to the forecasting module
+
+    :return:
+    """
     __logger.info("Registering the service at the service registry")
     # Allow writing to the global client
     global __service_registry_client, __amqp_client
@@ -61,6 +69,12 @@ async def startup():
 # Handler for the shutdown process
 @water_usage_forecasts_rest.on_event('shutdown')
 async def shutdown():
+    """Shutdown event handler
+
+    This event handler will deregister the service from the service registry
+
+    :return:
+    """
     global __service_registry_client
     __service_registry_client.stop()
 
@@ -68,6 +82,12 @@ async def shutdown():
 # Handler for validation errors, meaning the request was bad
 @water_usage_forecasts_rest.exception_handler(RequestValidationError)
 async def request_validation_error_handler(__request: Request, exc: RequestValidationError):
+    """
+    Error handler for request validation errors
+
+    These errors will occur if the request data is not valid. This error handler just changes the
+    status from 422 (Unprocessable Entity) to 400 (Bad Request)
+    """
     return JSONResponse(
         status_code=400,
         content={
@@ -79,6 +99,11 @@ async def request_validation_error_handler(__request: Request, exc: RequestValid
 # Handler for errors in data which were validated later on
 @water_usage_forecasts_rest.exception_handler(QueryDataError)
 async def query_data_error_handler(_request: Request, exc: QueryDataError):
+    """Error handler for querying data which is not available
+
+    This error handler will return a status code 400 (Bad Request) alongside with some
+    information on the reason for the error
+    """
     return JSONResponse(
         status_code=400,
         content={
@@ -91,13 +116,25 @@ async def query_data_error_handler(_request: Request, exc: QueryDataError):
 # Route for generating a new request
 @water_usage_forecasts_rest.get(path='/{spatial_unit}/{district}/{forecast_type}')
 async def run_prognosis(
-        request: Request,
         spatial_unit: SpatialUnit,
         district: str,
         forecast_type: ForecastType,
         consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'),
         db_connection: Session = Depends(database.get_database_session)
 ):
+    """Run a new prognosis
+
+    :param spatial_unit: Selected spatial unit
+    :type spatial_unit: SpatialUnit
+    :param district: The district in the selected spatial unit
+    :type district: str
+    :param forecast_type: The model which shall be used during broadcasting
+    :type forecast_type: ForecastType
+    :param consumer_group: The consumer group whose water usages shall be predicted, defaults to all
+    :type consumer_group: ConsumerGroup
+    :param db_connection: Connection to the database used to do some queries
+    :type db_connection: Session
+    """
     __logger.info(
         'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, District: %s, '
         'Consumer Group(s): %s',

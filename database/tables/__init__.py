@@ -22,6 +22,7 @@ class Commune(TableBase):
 
 
 class ConsumerType(TableBase):
+    """ORM for the consumer types"""
     __tablename__ = "consumer_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

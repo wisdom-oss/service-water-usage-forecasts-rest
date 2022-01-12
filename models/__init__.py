@@ -3,6 +3,9 @@ from pydantic import BaseSettings, Field, stricturl
 
 
 class ServiceSettings(BaseSettings):
+    """
+    Settings for this service
+    """
     database_dsn: stricturl(tld_required=False, allowed_schemes={"mariadb+pymysql"}) = Field(
         default=...,
         env='DATABASE_DSN'
