@@ -1,10 +1,10 @@
 """Collection of generic operations run on the database"""
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from sqlalchemy.orm import Session
 
 from models.requests import ConsumerGroup
-from .. import Commune, ConsumerType, County
+from .. import Commune, ConsumerType, County, WaterUsageAmount
 
 
 def get_consumer_group_id(consumer_group: ConsumerGroup, db: Session) -> Optional[int]:
@@ -21,6 +21,19 @@ def get_consumer_group_id(consumer_group: ConsumerGroup, db: Session) -> Optiona
         return None
 
 
+def get_consumer_type_id(consumer_type: str, db: Session) -> Optional[int]:
+    """Get the ID of a consumer group defined in the database
+
+    :param consumer_type: Consumer Type
+    :param db: Database connection
+    :return:
+    """
+    try:
+        return db.query(ConsumerType).filter(ConsumerType.name == consumer_type).first().id
+    except AttributeError:
+        return None
+
+
 def get_commune_id(district, db):
     """Get the id (primary key) of the commune with the name supplied.
 
@@ -30,6 +43,19 @@ def get_commune_id(district, db):
     """
     try:
         return db.query(Commune).filter(Commune.name == district).first().id
+    except AttributeError:
+        return None
+
+
+def get_county_id(district, db):
+    """Get the id (primary key) of the commune with the name supplied.
+
+    :param district: Name of the commune
+    :param db: Database connection
+    :return: The commune id if the commune exists. Else None
+    """
+    try:
+        return db.query(County).filter(County.name == district).first().id
     except AttributeError:
         return None
 
@@ -77,3 +103,20 @@ def get_county_names(db: Session) -> List[str]:
     for _county in _counties:
         names.append(_county.name)
     return names
+
+
+def insert_object(
+        obj: Union[Commune, County, ConsumerType, WaterUsageAmount],
+        db: Session
+) -> Union[Commune, County, ConsumerType, WaterUsageAmount]:
+    """Insert a new object into the database
+
+    :param obj: The object which shall be inserted
+    :param db: Database connection
+    """
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
