@@ -12,7 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 import database
-from api.exceptions import QueryDataError
+from exceptions import QueryDataError
 from api.functions import district_in_spatial_unit, get_water_usage_data
 from database.tables.operations import get_commune_names, get_county_names
 from messaging import AMQPRPCClient
@@ -56,7 +56,7 @@ async def startup():
         duration_in_secs=10
     )
     # Start the service registry client
-    __service_registry_client.start()
+    #  __service_registry_client.start()
     # Initialize the ORM models
     database.initialise_orm_models()
     # Create the client
