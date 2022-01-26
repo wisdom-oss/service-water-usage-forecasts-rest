@@ -45,11 +45,11 @@ def import_counties_from_file(file_path: Union[str, bytes, os.PathLike]):
         __county = County(name=county)
         try:
             __county = insert_object(__county, db_session)
+            counties.append(
+                __county
+            )
         except IntegrityError:
             raise DuplicateEntryError
-        counties.append(
-           __county
-        )
     return counties
 
 

@@ -20,7 +20,7 @@ class ServiceSettings(BaseSettings):
 
     amqp_url: stricturl(tld_required=False, allowed_schemes={"amqp"}) = Field(
         default=...,
-        env="AMQP_URL"
+        env="AMQP_DSN"
     )
     """URL containing the credentials and address of the message broker"""
 
