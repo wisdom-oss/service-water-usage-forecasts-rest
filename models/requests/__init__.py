@@ -1,4 +1,5 @@
 """Models for the incoming requests"""
+from enum import Enum
 from typing import List
 
 from pydantic import BaseModel, Field, root_validator

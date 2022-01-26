@@ -1,17 +1,23 @@
 """Module in which the server is described and all ops of the server are commenced in"""
 import json
 import logging
+import uuid
+from pathlib import Path
 from time import sleep
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Body, Depends, FastAPI, File, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from py_eureka_client.eureka_client import EurekaClient
 from sqlalchemy.orm import Session
+from starlette import status
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 import database
+import database.imports.csv
+import exceptions
+import models.requests.enums
 from exceptions import QueryDataError
 from api.functions import district_in_spatial_unit, get_water_usage_data
 from database.tables.operations import get_commune_names, get_county_names
@@ -113,6 +119,19 @@ async def query_data_error_handler(_request: Request, exc: QueryDataError):
     )
 
 
+# Handler for errors in data which were validated later on
+@water_usage_forecasts_rest.exception_handler(exceptions.DuplicateEntryError)
+async def query_data_error_handler(_request: Request, exc: exceptions.DuplicateEntryError):
+    """Error handler for querying data which is not available
+
+    This error handler will return a status code 400 (Bad Request) alongside with some
+    information on the reason for the error
+    """
+    return Response(
+        status_code=409
+    )
+
+
 # Route for generating a new request
 @water_usage_forecasts_rest.get(path='/{spatial_unit}/{district}/{forecast_type}')
 async def run_prognosis(
@@ -163,6 +182,43 @@ async def run_prognosis(
         sleep(0.1)
 
     return json.loads(__amqp_client.responses[__msg_id])
+
+
+@water_usage_forecasts_rest.put(
+    path='/import/{datatype}',
+    status_code=201
+)
+async def put_new_datafile(
+        datatype: models.requests.enums.ImportDataTypes,
+        data: UploadFile = File(...)
+):
+    """Import a new set of data into the database
+
+    :param datatype: The type of data which shall be imported
+    :param data: The file which shall be imported
+    :return: If the request was a success it will send a 201 code back
+    """
+    print(data.filename)
+    # Create a file id
+    file_id: str = uuid.uuid4().hex
+    # Write the uploaded file into ./tmp/file_id.csv
+    tmp_folder = Path('./.tmp')
+    # Create the folder and ignore if it already exists
+    tmp_folder.mkdir(parents=True, exist_ok=True)
+    _tmp_file_name = f'./.tmp/{file_id}.csv'
+    with open(_tmp_file_name, 'wb+') as tmp_file:
+        tmp_file.write(await data.read())
+    # Now check the datatype which shall be uploaded
+    if datatype == models.requests.enums.ImportDataTypes.COMMUNES:
+        database.imports.csv.import_communes_from_file(_tmp_file_name)
+    elif datatype == models.requests.enums.ImportDataTypes.COUNTIES:
+        database.imports.csv.import_counties_from_file(_tmp_file_name)
+    elif datatype == models.requests.enums.ImportDataTypes.CONSUMER_TYPES:
+        database.imports.csv.import_consumer_types_from_file(_tmp_file_name)
+    elif datatype == models.requests.enums.ImportDataTypes.USAGES:
+        database.imports.csv.import_water_usages_from_file(_tmp_file_name)
+    else:
+        return Response(status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
 
 # Route for getting information about the possible parameters

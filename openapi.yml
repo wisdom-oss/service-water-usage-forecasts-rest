@@ -137,3 +137,33 @@ paths:
                         items:
                           type: number
 
+  /import/{dataType}:
+    parameters:
+      - name: dataType
+        in: path
+        required: true
+        schema:
+          default: communes
+          type: string
+          enum:
+            - communes
+            - counties
+            - consumerTypes
+            - usages
+    put:
+      summary: Import the sent file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: data
+              properties:
+                data:
+                  type: string
+                  format: binary
+      responses:
+        201:
+          description: The import was successful
+        409:
+          description: During the import a ForeignKey or Constraint was violated
