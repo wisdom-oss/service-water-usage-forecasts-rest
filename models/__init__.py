@@ -14,9 +14,9 @@ class ServiceSettings(BaseSettings):
 
     service_registry_url: str = Field(
         default=...,
-        env='SERVICE_REGISTRY_URL'
+        env='SERVICE_REGISTRY_HOST'
     )
-    """URL Pointing to the Eureka Server installation of this instance"""
+    """Host of the service registry instance"""
 
     amqp_url: stricturl(tld_required=False, allowed_schemes={"amqp"}) = Field(
         default=...,

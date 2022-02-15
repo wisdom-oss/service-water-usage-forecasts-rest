@@ -12,9 +12,12 @@ WORKDIR /opt/water-usage-forecast-rest
 # Copy and install the requirements
 COPY . /opt/water-usage-forecast-rest
 RUN python -m pip install -r /opt/water-usage-forecast-rest/requirements.txt
+RUN python -m pip install hypercorn[uvloop]
+RUN apt-get update && apt-get install wait-for-it
+
 # Switch to the just created user and into the home directory
 USER water-usage-forecast-rest
 
 # Expose port used by hypercorn 5000
 EXPOSE 5000
-ENTRYPOINT ["hypercorn", "-b0.0.0.0:5000", "-w8", "-kuvloop", "api:water_usage_forecasts_rest"]
+ENTRYPOINT wait-for-it ${SERVICE_REGISTRY_HOST} -s -q -t 0 -- hypercorn -b0.0.0.0:5000 -w8 -kuvloop api:water_usage_forecasts_rest
