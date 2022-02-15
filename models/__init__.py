@@ -3,6 +3,9 @@ from pydantic import BaseSettings, Field, stricturl
 
 
 class ServiceSettings(BaseSettings):
+    """
+    Settings for this service
+    """
     database_dsn: stricturl(tld_required=False, allowed_schemes={"mariadb+pymysql"}) = Field(
         default=...,
         env='DATABASE_DSN'
@@ -11,13 +14,13 @@ class ServiceSettings(BaseSettings):
 
     service_registry_url: str = Field(
         default=...,
-        env='SERVICE_REGISTRY_URL'
+        env='SERVICE_REGISTRY_HOST'
     )
-    """URL Pointing to the Eureka Server installation of this instance"""
+    """Host of the service registry instance"""
 
     amqp_url: stricturl(tld_required=False, allowed_schemes={"amqp"}) = Field(
         default=...,
-        env="AMQP_URL"
+        env="AMQP_DSN"
     )
     """URL containing the credentials and address of the message broker"""
 

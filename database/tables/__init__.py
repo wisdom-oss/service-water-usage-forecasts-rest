@@ -1,7 +1,11 @@
 """Module for describing the Tables used in the database accesses"""
-from sqlalchemy import Column, ForeignKey, Integer, String, Float
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text
 
-from .. import TableBase
+from sqlalchemy.orm import declarative_base
+
+
+# Create a Base for new table declarations
+TableBase = declarative_base()
 
 
 class County(TableBase):
@@ -9,7 +13,7 @@ class County(TableBase):
     __tablename__ = "counties"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True)
+    name = Column(String(255), unique=True)
 
 
 class Commune(TableBase):
@@ -17,16 +21,19 @@ class Commune(TableBase):
     __tablename__ = "communes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True)
-    in_county = Column(Integer, ForeignKey("county.id"))
+    name = Column(String(255), unique=True)
+    in_county = Column(
+        Integer, ForeignKey("counties.id", onupdate='CASCADE', ondelete='CASCADE'), nullable=True
+    )
 
 
 class ConsumerType(TableBase):
+    """ORM for the consumer types"""
     __tablename__ = "consumer_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String, unique=True)
-    type = Column(String, unique=True)
+    name = Column(String(255), unique=True)
+    description = Column(Text)
 
 
 class WaterUsageAmount(TableBase):
@@ -34,7 +41,10 @@ class WaterUsageAmount(TableBase):
     __tablename__ = "usage_values"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    commune = Column(Integer, ForeignKey("commune.id"))
-    consumer_type = Column(Integer)
+    commune = Column(Integer, ForeignKey("communes.id", onupdate='CASCADE', ondelete='CASCADE'))
+    consumer_type = Column(
+        Integer,
+        ForeignKey("consumer_types.id", onupdate='CASCADE', ondelete='CASCADE')
+    )
     value = Column(Float)
     year = Column(Integer)

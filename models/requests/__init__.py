@@ -1,3 +1,5 @@
+"""Models for the incoming requests"""
+from enum import Enum
 from typing import List
 
 from pydantic import BaseModel, Field, root_validator
@@ -23,20 +25,28 @@ class RealData(BaseModel):
     )
 
     class Config:
+        """Configuration for the RealData model"""
         allow_population_by_field_name = True
         allow_population_by_alias = True
 
     @root_validator
     def check_data_consistency(cls, values):
+        """Pydantic validator which will check for the consistency between the given time period
+        and the supplied usage amounts
+
+        :param values:
+        :return:
+        """
         time_period_start = values.get("time_period_start")
         time_period_end = values.get("time_period_end")
         water_usage_amounts = values.get("water_usage_amounts")
+        print(time_period_start, time_period_end, water_usage_amounts, len(water_usage_amounts))
         if time_period_start >= time_period_end:
             raise ValueError(
                 'The start of the time period may not be after the end of the time '
                 'period'
             )
-        expected_values_in_list = (time_period_end + 1) - time_period_start
+        expected_values_in_list = time_period_end - (time_period_start + 1)
         value_discrepancy = expected_values_in_list - len(water_usage_amounts)
         if value_discrepancy > 0:
             raise ValueError(f'The Water usage amounts list is missing {value_discrepancy} entries')
@@ -49,6 +59,9 @@ class RealData(BaseModel):
 
 
 class ForecastRequest(RealData):
+    """
+    Model for describing the incoming forecast request, which will be used to build the amqp message
+    """
     forecast_type: ForecastType = Field(
         default=...,
         alias='forecastType'

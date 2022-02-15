@@ -17,7 +17,7 @@ if __name__ == '__main__':
     print('WISdoM OSS - Water Usage Forecast REST Service is starting')
 
     # Create the logger format for this service
-    __LOGGER_FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(lineno)s - %(message)s'
+    _LOG_FMT = '%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(lineno)s - %(message)s'
     """Logger format used throughout this service"""
 
     # Resolve the logging level from the environment variables
@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     # Configure the root logger with the format and the level
     logging.basicConfig(
-        format=__LOGGER_FORMAT,
+        format=_LOG_FMT,
         level=__logger_level,
         force=True
     )

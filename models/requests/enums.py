@@ -22,3 +22,14 @@ class ConsumerGroup(str, Enum):
     FARMING_FORESTRY_FISHING_INDUSTRY = "farming_forestry_fishing_industry"
     PUBLIC_INSTITUTIONS = "public_institutions"
     ALL = "all"
+
+
+class ImportDataTypes(str, Enum):
+    """
+    A class for fixating the possible data imports
+    """
+
+    COMMUNES = 'communes'
+    COUNTIES = 'counties',
+    CONSUMER_TYPES = 'consumerTypes'
+    USAGES = 'usages'
