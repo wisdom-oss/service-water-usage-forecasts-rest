@@ -6,17 +6,21 @@ from pathlib import Path
 
 import pandas
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from exceptions import DuplicateEntryError
-from ... import get_database_session
-from ...tables import County, Commune, ConsumerType, WaterUsageAmount
-from ...tables.operations import get_commune_id, get_consumer_type_id, get_county_id, \
+from database.tables import County, Commune, ConsumerType, WaterUsageAmount
+from database.tables.operations import get_commune_id, get_consumer_type_id, get_county_id, \
     get_county_names, insert_object
 
 
-def import_counties_from_file(file_path: Union[str, bytes, os.PathLike]):
+def import_counties_from_file(
+        file_path: Union[str, bytes, os.PathLike],
+        db_session: Session
+) -> List[County]:
     """Import a set of counties into the database
 
+    :param db_session: Database session used to insert the single rows
     :param file_path: Path to the CSV file containing the new counties
     :return: After the successful import it will return all inserted orm items
     :raises FileNotFoundError: The path supplied does not point to a file
@@ -39,7 +43,6 @@ def import_counties_from_file(file_path: Union[str, bytes, os.PathLike]):
     )
     # Iterate though the series of counties and save the counties into a list
     counties: List[County] = []
-    db_session = next(get_database_session())
     for county in counties_series:
         # Create a new orm mapping
         __county = County(name=county)
@@ -53,11 +56,15 @@ def import_counties_from_file(file_path: Union[str, bytes, os.PathLike]):
     return counties
 
 
-def import_communes_from_file(file_path: Union[str, bytes, os.PathLike]) -> List[Commune]:
+def import_communes_from_file(
+        file_path: Union[str, bytes, os.PathLike],
+        db_session: Session
+) -> List[Commune]:
     """Import communes into the database
 
     This import will also create the foreign key relations for communes in counties
 
+    :param db_session: Database session used to insert the single rows
     :param file_path: Path to the file containing the commune data
     :return: List of created communes
     :raises FileNotFoundError: The path supplied does not point to a file
@@ -80,7 +87,6 @@ def import_communes_from_file(file_path: Union[str, bytes, os.PathLike]) -> List
     # Replace missing values with none
     commune_data_frame = commune_data_frame.where(pandas.notnull(commune_data_frame), None)
     # Iterate though the rows
-    db_session = next(get_database_session())
     communes: List[Commune] = []
     for row in commune_data_frame.itertuples():
         _commune_name = row[1]
@@ -105,10 +111,13 @@ def import_communes_from_file(file_path: Union[str, bytes, os.PathLike]) -> List
 
 
 def import_consumer_types_from_file(
-        file_path: Union[str, bytes, os.PathLike]
+        file_path: Union[str, bytes, os.PathLike],
+        db_session: Session
 ) -> List[ConsumerType]:
-    """
+    """Import new consumer types from a csv file
 
+
+    :param db_session: Database session used to insert the single rows
     :param file_path: Path to the file containing the consumer types
     :return: List of inserted consumer types
     :raises FileNotFoundError: The path supplied does not point to a file
@@ -134,7 +143,6 @@ def import_consumer_types_from_file(
         inplace=True
     )
     # Get a new database session
-    db_session = next(get_database_session())
     # Create a list for the inserted consumer types and iterate through the data frame's rows
     consumer_types: List[ConsumerType] = []
     for row in consumer_type_data_frame.itertuples():
@@ -154,10 +162,12 @@ def import_consumer_types_from_file(
 
 
 def import_water_usages_from_file(
-        file_path: Union[str, bytes, os.PathLike]
+        file_path: Union[str, bytes, os.PathLike],
+        db_session: Session
 ) -> List[WaterUsageAmount]:
     """Import new water usages from a csv file
 
+    :param db_session: Database session used to insert the single rows
     :param file_path: Path to the file containing the water usages
     :return: List of inserted water usage values
     :raises FileNotFoundError: The path supplied does not point to a file
@@ -186,7 +196,6 @@ def import_water_usages_from_file(
         inplace=True
     )
     # Get a database session
-    db_session = next(get_database_session())
     usage_values: List[WaterUsageAmount] = []
     for row in usage_value_data_frame.itertuples():
         _usage_location = row[1]

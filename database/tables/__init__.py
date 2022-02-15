@@ -1,7 +1,11 @@
 """Module for describing the Tables used in the database accesses"""
 from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text
 
-from .. import TableBase
+from sqlalchemy.orm import declarative_base
+
+
+# Create a Base for new table declarations
+TableBase = declarative_base()
 
 
 class County(TableBase):

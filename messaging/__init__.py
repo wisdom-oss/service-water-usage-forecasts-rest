@@ -3,6 +3,7 @@ import logging
 import threading
 import uuid
 from time import sleep
+from typing import Tuple
 
 import pika
 
@@ -13,6 +14,7 @@ class AMQPRPCClient:
     """This publisher will send out messages to the specified fanout exchange"""
     __internal_lock = threading.Lock()
     responses = {}
+    events = {}
 
     def __init__(self, amqp_url, exchange_name):
         """Create a new MessagePublisher
@@ -72,17 +74,23 @@ class AMQPRPCClient:
         :param content:
         :return:
         """
-        self.responses[properties.correlation_id] = content
+        print(content)
+        self.responses[properties.correlation_id] = content.decode('utf-8')
+        print(self.responses[properties.correlation_id])
         self.__channel.basic_ack(method.delivery_tag)
+        event: threading.Event = self.events[properties.correlation_id]
+        event.set()
 
-    def publish_message(self, request: ForecastRequest) -> str:
+    def publish_message(self, request: ForecastRequest) -> Tuple[str, threading.Event]:
         """Publish a new message in the exchange for the calculation module
 
         :param request:
         :return: The correlation id used to send the message
         """
         __correlation_id = 'request#' + str(uuid.uuid4())
+        __message_received_event = threading.Event()
         self.responses[__correlation_id] = None
+        self.events[__correlation_id] = __message_received_event
         with self.__internal_lock:
             self.__channel.basic_publish(
                 exchange=self.__exchange_name,
@@ -94,5 +102,5 @@ class AMQPRPCClient:
                 body=request.json(by_alias=True).encode('utf-8')
             )
             self.__logger.info('Published message')
-        return __correlation_id
+        return __correlation_id, __message_received_event
 
