@@ -1,9 +1,11 @@
 """Async"""
 import logging
+import subprocess
 import threading
 import uuid
 from time import sleep
 from typing import Tuple
+from pydantic import AmqpDsn
 
 import pika
 
@@ -22,12 +24,14 @@ class AMQPRPCClient:
         :param amqp_url: AMQP URL specifying the connection details
         :param exchange_name: Name of the exchange the requests should be published to
         """
-        self.__amqp_url = amqp_url
+        self.__amqp_url: AmqpDsn = amqp_url
         self.__exchange_name = exchange_name
 
         # Create a Logger for the Publisher
         self.__logger = logging.getLogger(__name__)
-
+        self.__logger.info('Waiting until the message broker is reachable')
+        subprocess.run(f'wait-for-it {self.__amqp_url.host}:5672 -s -q -t 0', shell=True)
+        self.__logger.info('The message broker is reachable. Connecting Now')
         # Create connection parameters
         connection_parameters = pika.URLParameters(self.__amqp_url)
         connection_parameters.client_properties = {
