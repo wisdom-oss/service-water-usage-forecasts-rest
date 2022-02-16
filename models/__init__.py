@@ -6,7 +6,10 @@ class ServiceSettings(BaseSettings):
     """
     Settings for this service
     """
-    database_dsn: stricturl(tld_required=False, allowed_schemes={"mariadb+pymysql"}) = Field(
+    database_dsn: stricturl(
+        tld_required=False,
+        allowed_schemes={"mariadb+pymysql", "mysql+pymysql"}
+    ) = Field(
         default=...,
         env='DATABASE_DSN'
     )
