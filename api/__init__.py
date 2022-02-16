@@ -62,7 +62,7 @@ async def startup():
         duration_in_secs=10
     )
     # Start the service registry client
-    #  __service_registry_client.start()
+    __service_registry_client.start()
     # Initialize the ORM models
     database.initialise_orm_models()
     # Create the client
