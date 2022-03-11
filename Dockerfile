@@ -12,7 +12,6 @@ WORKDIR /opt/water-usage-forecast-rest
 # Copy and install the requirements
 COPY . /opt/water-usage-forecast-rest
 RUN python -m pip install -r /opt/water-usage-forecast-rest/requirements.txt
-RUN python -m pip install hypercorn[uvloop]
 
 # Switch to the just created user and into the home directory
 USER water-usage-forecast-rest
