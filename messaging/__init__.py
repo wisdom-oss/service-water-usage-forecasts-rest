@@ -26,12 +26,8 @@ class AMQPRPCClient:
         """
         self.__amqp_url: AmqpDsn = amqp_url
         self.__exchange_name = exchange_name
-
         # Create a Logger for the Publisher
         self.__logger = logging.getLogger(__name__)
-        self.__logger.info('Waiting until the message broker is reachable')
-        subprocess.run(f'wait-for-it {self.__amqp_url.host}:5672 -s -q -t 0', shell=True)
-        self.__logger.info('The message broker is reachable. Connecting Now')
         # Create connection parameters
         connection_parameters = pika.URLParameters(self.__amqp_url)
         connection_parameters.client_properties = {
@@ -43,6 +39,7 @@ class AMQPRPCClient:
         )
         # Open a channel and generate a unique and exclusive queue to which there should be answers
         self.__channel = self.__connection.channel()
+        self.__channel.exchange_declare(self.__exchange_name, exchange_type='fanout')
         self.__queue = self.__channel.queue_declare('', exclusive=True, auto_delete=True)
         self.__msg_callback_queue = self.__queue.method.queue
 
@@ -85,10 +82,10 @@ class AMQPRPCClient:
         event: threading.Event = self.events[properties.correlation_id]
         event.set()
 
-    def publish_message(self, request: ForecastRequest) -> Tuple[str, threading.Event]:
+    def publish_message(self, message: str) -> Tuple[str, threading.Event]:
         """Publish a new message in the exchange for the calculation module
 
-        :param request:
+        :param message: The message that shall be transmitted
         :return: The correlation id used to send the message
         """
         __correlation_id = 'request#' + str(uuid.uuid4())
@@ -103,7 +100,7 @@ class AMQPRPCClient:
                     reply_to=self.__msg_callback_queue,
                     correlation_id=__correlation_id
                 ),
-                body=request.json(by_alias=True).encode('utf-8')
+                body=message.encode('utf-8')
             )
             self.__logger.info('Published message')
         return __correlation_id, __message_received_event
