@@ -83,6 +83,9 @@ def get_water_usage_data(
         for __usage_amount in __usage_amounts_with_years:
             __usage_amounts.append(__usage_amount[1])
         # Build the return value
+        logging.critical('Usage Amounts: %s', __usage_amounts)
+        logging.critical('Number of Amoubts: %s', len(__usage_amounts))
+        logging.critical('START: %s | END: %s', __usage_amounts_with_years[0][0], __usage_amounts_with_years[-1][0])
         return RealData(
             time_period_start=__usage_amounts_with_years[0][0],
             time_period_end=__usage_amounts_with_years[-1][0],
@@ -108,6 +111,9 @@ def get_water_usage_data(
             _data.update({commune_id: pandas.Series(_usage_amounts, _years)})
         data_frame = pandas.DataFrame(_data)
         usage_data: pandas.Series = data_frame.fillna(0).sum(axis='columns')
+        logging.critical('PANDAS - START YEAR: %s', usage_data.keys()[0])
+        logging.critical('PANDAS - END YEAR: %s', usage_data.keys()[-1])
+        logging.critical('PANDAS - VALUES: %s', usage_data.tolist())
         return RealData(
             time_period_start=usage_data.keys()[0],
             time_period_end=usage_data.keys()[-1],
