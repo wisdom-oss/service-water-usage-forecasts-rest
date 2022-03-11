@@ -1,6 +1,7 @@
 """Module for outsourced functions for better maintainability"""
 import logging
 
+import numpy as np
 import pandas
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import functions as func
@@ -71,44 +72,52 @@ def get_water_usage_data(
         # Get the foreign key value for the commune
         __commune_filter_value = database.tables.operations.get_commune_id(district, db)
         # Get the years and usage amounts
-        __usage_amounts_with_years = db \
+        usages = db \
             .query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value)) \
             .group_by(WaterUsageAmount.year) \
             .filter(
                 WaterUsageAmount.commune == __commune_filter_value,
                 WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
             ).all()
-        # Iterate through the paired valued to receive the usage amounts
-        __usage_amounts = []
-        for __usage_amount in __usage_amounts_with_years:
-            __usage_amounts.append(__usage_amount[1])
-        # Build the return value
-        logging.critical('Usage Amounts: %s', __usage_amounts)
-        logging.critical('Number of Amoubts: %s', len(__usage_amounts))
-        logging.critical('START: %s | END: %s', __usage_amounts_with_years[0][0], __usage_amounts_with_years[-1][0])
+        _available_data = {}
+        for year, usage_amount in usages:
+            _available_data.update({year: usage_amount})
+        _available_years = list(_available_data.keys())
+        _needed_years = np.arange(_available_years[0], stop=_available_years[-1])
+        _sanitized_usage_data = []
+        for year in _needed_years:
+            if year not in _available_data.keys():
+                _sanitized_usage_data.append(0)
+            else:
+                _sanitized_usage_data.append(_available_data.get(year))
         return RealData(
-            time_period_start=__usage_amounts_with_years[0][0],
-            time_period_end=__usage_amounts_with_years[-1][0],
-            water_usage_amounts=__usage_amounts
+            time_period_start=_needed_years.tolist()[0],
+            time_period_end=_needed_years.tolist()[-1],
+            water_usage_amounts=_sanitized_usage_data
         )
     elif spatial_unit == SpatialUnit.COUNTY:
         _communes = database.tables.operations.get_communes_in_county(district, db)
-        print(_communes)
         _data = {}
         for commune_id in _communes:
-            _usages_with_years = db\
+            usages = db\
                 .query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value))\
                 .group_by(WaterUsageAmount.year)\
                 .filter(
                         WaterUsageAmount.commune == commune_id,
                         WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
                 ).all()
-            _years = []
-            _usage_amounts = []
-            for usage_with_year in _usages_with_years:
-                _years.append(usage_with_year[0])
-                _usage_amounts.append(usage_with_year[1])
-            _data.update({commune_id: pandas.Series(_usage_amounts, _years)})
+            _available_data = {}
+            for year, usage_amount in usages:
+                _available_data.update({year: usage_amount})
+            _available_years = list(_available_data.keys())
+            _needed_years = np.arange(_available_years[0], stop=_available_years[-1])
+            _sanitized_usage_data = []
+            for year in _needed_years:
+                if year not in _available_data.keys():
+                    _sanitized_usage_data.append(None)
+                else:
+                    _sanitized_usage_data.append(_available_data.get(year))
+            _data.update({commune_id: pandas.Series(_sanitized_usage_data, _needed_years)})
         data_frame = pandas.DataFrame(_data)
         usage_data: pandas.Series = data_frame.fillna(0).sum(axis='columns')
         logging.critical('PANDAS - START YEAR: %s', usage_data.keys()[0])
