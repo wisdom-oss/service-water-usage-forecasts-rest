@@ -8,3 +8,4 @@ pika==1.2.0
 pandas==1.4.1
 uvloop==0.16.0
 python-multipart
+uvicorn~=0.17.6
