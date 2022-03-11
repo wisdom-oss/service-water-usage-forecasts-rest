@@ -76,7 +76,7 @@ async def startup():
         amqp_url=_amqp_settings.dsn,
         exchange_name=_amqp_settings.exchange
     )
-    __amqp_security_client = AMQPRPCClient(
+    _amqp_security_client = AMQPRPCClient(
         amqp_url=_amqp_settings.dsn,
         exchange_name=_security_settings.authorization_exchange
     )
@@ -168,7 +168,7 @@ async def authenticate_token_for_application(request: Request, next_action):
                 "scopes": "water-usage:forecasts"
             }
             print(_validation_request)
-            __msg_id, __msg_received = _amqp_client.publish_message(json.dumps(
+            __msg_id, __msg_received = _amqp_security_client.publish_message(json.dumps(
                 _validation_request, ensure_ascii=False))
             if __msg_received.wait():
                 _validation_response = json.loads(_amqp_security_client.responses[__msg_id])
