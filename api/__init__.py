@@ -151,6 +151,7 @@ async def authenticate_token_for_application(request: Request, next_action):
     :param request:
     :return: The response
     """
+    global _amqp_security_client
     # Get the authorization headers value
     header = request.headers.get('Authorization', None)
     if header is None:
@@ -158,7 +159,7 @@ async def authenticate_token_for_application(request: Request, next_action):
             status_code=status.HTTP_400_BAD_REQUEST
         )
     else:
-        _matcher_string = r"Bearer ([0-9a-fA-F]{8}\b-(?:[0-9a-fA-F]{4}\b-){3}[0-9a-fA-F]{12})"
+        _matcher_string = r"[Bb]earer ([0-9a-fA-F]{8}\b-(?:[0-9a-fA-F]{4}\b-){3}[0-9a-fA-F]{12})"
         if match := re.match(_matcher_string, header):
             token = match.group(1)
             _validation_request = {
