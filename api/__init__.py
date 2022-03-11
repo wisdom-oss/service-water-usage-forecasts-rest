@@ -173,7 +173,8 @@ async def authenticate_token_for_application(request: Request, next_action):
             if __msg_received.wait():
                 _validation_response = json.loads(_amqp_security_client.responses[__msg_id])
                 if _validation_response["active"] is True:
-                    response = next_action(request)
+                    response = await next_action(request)
+                    return response
                 else:
                     return Response(
                         status_code=status.HTTP_400_BAD_REQUEST
