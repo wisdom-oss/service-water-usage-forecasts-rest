@@ -52,7 +52,10 @@ class AMQPRPCClient:
     def __process_data_events(self):
         """Check for new incoming data"""
         self.__channel.basic_consume(
-            self.__msg_callback_queue, self.__on_message_received, auto_ack=False
+            self.__msg_callback_queue,
+            self.__on_message_received,
+            auto_ack=False,
+            exclusive=True
         )
 
         while True:

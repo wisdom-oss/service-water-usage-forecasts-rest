@@ -229,10 +229,10 @@ async def run_prognosis(
         consumer_group=consumer_group
     )
     # Publish the request
-
+    global _amqp_client
     __msg_id, __msg_received = _amqp_client.publish_message(_request.json())
 
-    if __msg_received.wait():
+    if __msg_received.wait(timeout=120):
         return json.loads(_amqp_client.responses[__msg_id])
     else:
         return JSONResponse(
