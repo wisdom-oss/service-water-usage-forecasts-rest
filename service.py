@@ -141,7 +141,7 @@ if __name__ == '__main__':
     uvicorn.run(**{
         "app":       "api:water_usage_forecasts_rest",
         "host":      "0.0.0.0",
-        "port":      _service_settings.http_port + 1,
+        "port":      _service_settings.http_port,
         "log_level": "warning",
         "workers":   1
     })

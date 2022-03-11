@@ -159,8 +159,6 @@ async def authenticate_token_for_application(request: Request, next_action):
             status_code=status.HTTP_400_BAD_REQUEST
         )
     else:
-        if header == 'jump':
-            return await next_action(request)
         _matcher_string = r"[Bb]earer ([0-9a-fA-F]{8}\b-(?:[0-9a-fA-F]{4}\b-){3}[0-9a-fA-F]{12})"
         if match := re.match(_matcher_string, header):
             token = match.group(1)
