@@ -3,9 +3,7 @@ import json
 import logging
 import re
 import uuid
-from multiprocessing import Barrier
 from pathlib import Path
-from time import sleep
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Query, UploadFile
@@ -16,14 +14,16 @@ from starlette import status
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+import amqp_rpc_client
+
 import database
 import exceptions
 import imports
 import models.requests.enums
-from exceptions import QueryDataError
 from api.functions import district_in_spatial_unit, get_water_usage_data
 from database.tables.operations import get_commune_names, get_county_names
-from messaging import AMQPRPCClient
+from exceptions import QueryDataError
+from models.amqp import TokenIntrospectionRequest
 from models.requests import ForecastRequest
 from models.requests.enums import ConsumerGroup, ForecastType, SpatialUnit
 from settings import *
@@ -40,8 +40,7 @@ _security_settings = SecuritySettings()
 # Create a private empty service registry client
 _registry_client: Optional[EurekaClient] = None
 # Create a private AMQPClient
-_amqp_client: Optional[AMQPRPCClient] = None
-_amqp_security_client: Optional[AMQPRPCClient] = None
+_amqp_client: Optional[amqp_rpc_client.Client] = None
 
 
 # Create a handler for the startup process
@@ -57,7 +56,7 @@ async def startup():
     """
     __logger.info("Registering the service at the service registry")
     # Allow writing to the global client
-    global _registry_client, _amqp_client, _amqp_security_client
+    global _registry_client, _amqp_client
     # Create a new service registry client
     _registry_client = EurekaClient(
         eureka_server=f'http://{_registry_settings.host}:{_registry_settings.port}',
@@ -72,13 +71,8 @@ async def startup():
     # Initialize the ORM models
     database.initialise_orm_models()
     # Create the client
-    _amqp_client = AMQPRPCClient(
-        amqp_url=_amqp_settings.dsn,
-        exchange_name=_amqp_settings.exchange
-    )
-    __amqp_security_client = AMQPRPCClient(
-        amqp_url=_amqp_settings.dsn,
-        exchange_name=_security_settings.authorization_exchange
+    _amqp_client = amqp_rpc_client.Client(
+        _amqp_settings.dsn
     )
 
 
@@ -151,36 +145,151 @@ async def authenticate_token_for_application(request: Request, next_action):
     :param request:
     :return: The response
     """
-    # Get the authorization headers value
-    header = request.headers.get('Authorization', None)
-    if header is None:
-        return Response(
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
-    else:
-        _matcher_string = r"Bearer ([0-9a-fA-F]{8}\b-(?:[0-9a-fA-F]{4}\b-){3}[0-9a-fA-F]{12})"
-        if match := re.match(_matcher_string, header):
-            token = match.group(1)
-            _validation_request = {
-                "action": "validate_token",
-                "token": token,
-                "scopes": "water-usage:forecasts"
+    # Access the request headers
+    headers = request.headers
+    # Check if a request id is present in the request to identify the request in the logs
+    _request_id = headers.get('X-Request-ID', uuid.uuid4().hex)
+    _request_host = request.client.host
+    _request_host_port = request.client.port
+    # Log that we received a new request
+    __logger.info('%s:%s - %s - Received new request for executing a water usage forecast',
+                  _request_id, _request_host, _request_host_port)
+    __logger.info('%s:%s - %s - Checking if the request is authorized and has the correct scope')
+    # Get the value stored in the Authorization header
+    _authorization_header_value: Optional[str] = headers.get('Authorization', None)
+    # Check if the header was even present
+    if _authorization_header_value is None:
+        __logger.warning('%s:%s - %s - [R] The request did not contain the necessary credentials',
+                         _request_id, _request_host, _request_host_port)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "missing_authorization_header"
+            },
+            headers={
+                'WWW-Authenticate': 'Bearer error="invalid_request"'
             }
-            print(_validation_request)
-            __msg_id, __msg_received = _amqp_client.publish_message(json.dumps(
-                _validation_request, ensure_ascii=False))
-            if __msg_received.wait():
-                _validation_response = json.loads(_amqp_security_client.responses[__msg_id])
-                if _validation_response["active"] is True:
-                    response = next_action(request)
-                else:
-                    return Response(
-                        status_code=status.HTTP_400_BAD_REQUEST
-                    )
-        else:
-            return Response(
-                status_code=status.HTTP_400_BAD_REQUEST
+        )
+    # Check if the Authorization scheme is bearer
+    if ("Bearer" or "bearer") not in _authorization_header_value:
+        __logger.error('%s:%s - %s - [R] The request contained an unsupported authorization scheme',
+                       _request_id, _request_host, _request_host_port)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "unsupported_authorization_scheme"
+            },
+            headers={
+                'WWW-Authenticate': 'Bearer error="invalid_request"'
+            }
+        )
+    # Remove the "Bearer" scheme from the header value
+    _user_token = _authorization_header_value.lower().replace('bearer', '').strip()
+    # Check if the bearer token is formatted like UUID
+    try:
+        uuid.UUID(_user_token)
+    except ValueError:
+        __logger.error('%s:%s - %s - [R] The Bearer token was malformed')
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "bearer_token_malformed"
+            },
+            headers={
+                'WWW-Authenticate': 'Bearer error="invalid_request"'
+            }
+        )
+    __logger.info('%s:%s - %s - Requesting an introspection from the authorization service')
+    # Request an introspection of the token from the authorization service
+    _introspection_request = TokenIntrospectionRequest(
+        bearer_token=_user_token
+    )
+    # Transmit the request using the rpc client
+    _introspection_id = _amqp_client.send(
+        content=_introspection_request.json(by_alias=True),
+        exchange=_security_settings.authorization_exchange
+    )
+    __logger.debug('%s:%s - %s - Transmitted the introspection request (id: %s',
+                   _request_host, _request_host_port, _request_id, _introspection_id)
+    __logger.info('%s:%s - %s - Awaiting the introspection result from the authorization service',
+                  _request_host, _request_host_port, _request_id)
+    _introspection_response_bytes = _amqp_client.await_response(_introspection_id, timeout=10.0)
+    if _introspection_response_bytes is None:
+        __logger.error('%s:%s - %s - [R] The authorization service did not return an response in '
+                       'a appropriate amount of time',
+                       _request_host, _request_host_port, _request_id)
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": "token_introspection_timeout"
+            },
+            headers={
+                'Retry-After': '10'
+            }
+        )
+    # Convert the introspection response into a dictionary
+    _introspection_response: dict = json.loads(_introspection_response_bytes)
+    # Check if the response contains the active key
+    if 'active' not in _introspection_response:
+        __logger.critical('%s:%s - %s - [R] The authorization service did not return a valid '
+                          'response',
+                          _request_host, _request_host_port, _request_id)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "token_introspection_failure"
+            },
+            headers={
+                'Retry-After': '15'
+            }
+        )
+    # Check if the active key indicated true
+    if _introspection_response.get('active') is False:
+        __logger.error('%s:%s - %s - The authorization service marked the bearer token as inactive',
+                       _request_host, _request_host_port, _request_id)
+        # Check if a generic answer is returned
+        if 'reason' not in _introspection_response:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": 'invalid_token'
+                },
+                headers={
+                    'WWW-Authenticate': 'Bearer error="invalid_token"'
+                }
             )
+        if _introspection_response.get('reason') == 'token_error':
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": 'invalid_token'
+                },
+                headers={
+                    'WWW-Authenticate': 'Bearer error="invalid_token"'
+                }
+            )
+        if _introspection_response.get('reason') == 'insufficient_scope':
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": 'insufficient_scope'
+                },
+                headers={
+                    'WWW-Authenticate': 'Bearer error="insufficient_scope"'
+                }
+            )
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": 'invalid_token'
+            },
+            headers={
+                'WWW-Authenticate': 'Bearer error="invalid_token"'
+            }
+        )
+    # Since the token was validated successfully and is allowed to access this resource the
+    # request may be executed
+    return await next_action(request)
     
 
 # Route for generating a new request
