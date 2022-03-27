@@ -23,8 +23,7 @@ import models.requests.enums
 from api.functions import district_in_spatial_unit, get_water_usage_data
 from database.tables.operations import get_commune_names, get_county_names
 from exceptions import QueryDataError
-from models.amqp import TokenIntrospectionRequest
-from models.requests import ForecastRequest
+from models.amqp import TokenIntrospectionRequest, ForecastRequest, WaterUsages
 from models.requests.enums import ConsumerGroup, ForecastType, SpatialUnit
 from settings import *
 
@@ -146,6 +145,7 @@ async def authenticate_token_for_application(request: Request, next_action):
     :return: The response
     """
     # Access the request headers
+    print(request.url)
     headers = request.headers
     # Check if a request id is present in the request to identify the request in the logs
     _request_id = headers.get('X-Request-ID', uuid.uuid4().hex)
@@ -293,11 +293,11 @@ async def authenticate_token_for_application(request: Request, next_action):
     
 
 # Route for generating a new request
-@water_usage_forecasts_rest.get(path='/{spatial_unit}/{district}/{forecast_type}')
+@water_usage_forecasts_rest.get(path='/{spatial_unit}/{forecast_type}')
 async def run_prognosis(
         spatial_unit: SpatialUnit,
-        district: str,
         forecast_type: ForecastType,
+        districts: list[str] = Query(default=..., alias='district'),
         consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'),
         db_connection: Session = Depends(database.get_database_session)
 ):
@@ -305,8 +305,8 @@ async def run_prognosis(
 
     :param spatial_unit: Selected spatial unit
     :type spatial_unit: SpatialUnit
-    :param district: The district in the selected spatial unit
-    :type district: str
+    :param districts: The district in the selected spatial unit
+    :type districts: str
     :param forecast_type: The model which shall be used during broadcasting
     :type forecast_type: ForecastType
     :param consumer_group: The consumer group whose water usages shall be predicted, defaults to all
@@ -315,41 +315,37 @@ async def run_prognosis(
     :type db_connection: Session
     """
     __logger.info(
-        'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, District: %s, '
+        'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, Districts: %s, '
         'Consumer Group(s): %s',
-        forecast_type, spatial_unit, district, consumer_group
+        forecast_type, spatial_unit, districts, consumer_group
     )
-    # Check if the district is in the spatial unit
-    if not district_in_spatial_unit(district, spatial_unit, db_connection):
-        raise QueryDataError(
-            "district_not_found",
-            "The district '{}' was not found in the spatial unit '{}'. Please check your "
-            'query'.format(district, spatial_unit)
+    responses = {}
+    for district in districts:
+        # Check if the district is in the spatial unit
+        if not district_in_spatial_unit(district, spatial_unit, db_connection):
+            raise QueryDataError(
+                "district_not_found",
+                "The district '{}' was not found in the spatial unit '{}'. Please check your "
+                'query'.format(district, spatial_unit)
+            )
+        # Get the water usage data
+        __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
+        _request = ForecastRequest(
+            type=forecast_type,
+            usage_data=__water_usage_data
         )
-    # Get the water usage data
-    __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
-    _request = ForecastRequest(
-        time_period_start=__water_usage_data.time_period_start,
-        time_period_end=__water_usage_data.time_period_end,
-        water_usage_amounts=__water_usage_data.water_usage_amounts,
-        forecast_type=forecast_type,
-        consumer_group=consumer_group
-    )
-    # Publish the request
-
-    __msg_id, __msg_received = _amqp_client.publish_message(_request.json())
-
-    if __msg_received.wait():
-        return json.loads(_amqp_client.responses[__msg_id])
-    else:
-        return JSONResponse(
-            status_code=504,
-            content={
-                "error":             "timeout",
-                "error_description": "While waiting for the response the internal messaging timed "
-                                     "out"
-            }
-        )
+        # Publish the request
+    
+        __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
+    
+        response = _amqp_client.await_response(__msg_id, timeout=60)
+        if response is not None:
+            responses.update({district: json.loads(response)})
+        else:
+            responses.update({district: {
+                    "error": "calculation_module_response_timeout"
+                }})
+    return responses
 
 
 @water_usage_forecasts_rest.put(

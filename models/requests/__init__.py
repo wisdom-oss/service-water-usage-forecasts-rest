@@ -39,13 +39,12 @@ class RealData(BaseModel):
         time_period_start = values.get("time_period_start")
         time_period_end = values.get("time_period_end")
         water_usage_amounts = values.get("water_usage_amounts")
-        print(time_period_start, time_period_end, water_usage_amounts, len(water_usage_amounts))
         if time_period_start >= time_period_end:
             raise ValueError(
                 'The start of the time period may not be after the end of the time '
                 'period'
             )
-        expected_values_in_list = time_period_end - (time_period_start + 1)
+        expected_values_in_list = (time_period_end + 1) - time_period_start
         value_discrepancy = expected_values_in_list - len(water_usage_amounts)
         if value_discrepancy > 0:
             raise ValueError(f'The Water usage amounts list is missing {value_discrepancy} entries')

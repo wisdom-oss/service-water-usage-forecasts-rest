@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import functions as func
 
 import database
+import models.amqp
 from database.tables import Commune, County, WaterUsageAmount, operations
 from models.requests import RealData
 from models.requests.enums import ConsumerGroup, SpatialUnit
@@ -83,10 +84,10 @@ def get_water_usage_data(
         for __usage_amount in __usage_amounts_with_years:
             __usage_amounts.append(__usage_amount[1])
         # Build the return value
-        return RealData(
-            time_period_start=__usage_amounts_with_years[0][0],
-            time_period_end=__usage_amounts_with_years[-1][0],
-            water_usage_amounts=__usage_amounts
+        return models.amqp.WaterUsages(
+            start=__usage_amounts_with_years[0][0],
+            end=__usage_amounts_with_years[-1][0],
+            usages=__usage_amounts
         )
     elif spatial_unit == SpatialUnit.COUNTY:
         _communes = database.tables.operations.get_communes_in_county(district, db)
@@ -108,8 +109,8 @@ def get_water_usage_data(
             _data.update({commune_id: pandas.Series(_usage_amounts, _years)})
         data_frame = pandas.DataFrame(_data)
         usage_data: pandas.Series = data_frame.fillna(0).sum(axis='columns')
-        return RealData(
-            time_period_start=usage_data.keys()[0],
-            time_period_end=usage_data.keys()[-1],
-            water_usage_amounts=usage_data.tolist()
+        return models.amqp.WaterUsages(
+            start=usage_data.keys()[0],
+            end=usage_data.keys()[-1],
+            usages=usage_data.tolist()
         )
