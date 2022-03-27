@@ -318,7 +318,7 @@ async def run_prognosis(
         'Consumer Group(s): %s',
         forecast_type, spatial_unit, districts, consumer_group
     )
-    responses = {}
+    response_list = []
     for district in districts:
         # Check if the district is in the spatial unit
         if not district_in_spatial_unit(district, spatial_unit, db_connection):
@@ -337,14 +337,21 @@ async def run_prognosis(
     
         __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
     
-        response = _amqp_client.await_response(__msg_id, timeout=60)
-        if response is not None:
-            responses.update({district: json.loads(response)})
+        byte_response = _amqp_client.await_response(__msg_id, timeout=60)
+        
+        if byte_response is not None:
+            response = json.loads(byte_response)
+            response.update({'name': district})
+            response.update({'consumerGroup': consumer_group.value})
+            response_list.append(response)
         else:
-            responses.update({district: {
+            response_list.append(
+                {
+                    "name": district,
                     "error": "calculation_module_response_timeout"
-                }})
-    return responses
+                }
+            )
+    return response_list
 
 
 @water_usage_forecasts_rest.put(
