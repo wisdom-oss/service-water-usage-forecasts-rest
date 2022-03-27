@@ -1,5 +1,4 @@
 """Models for the incoming requests"""
-from enum import Enum
 from typing import List
 
 from pydantic import BaseModel, Field, root_validator
@@ -40,7 +39,6 @@ class RealData(BaseModel):
         time_period_start = values.get("time_period_start")
         time_period_end = values.get("time_period_end")
         water_usage_amounts = values.get("water_usage_amounts")
-        print(time_period_start, time_period_end, water_usage_amounts, len(water_usage_amounts))
         if time_period_start >= time_period_end:
             raise ValueError(
                 'The start of the time period may not be after the end of the time '
