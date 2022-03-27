@@ -165,7 +165,7 @@ async def authenticate_token_for_application(request: Request, next_action):
             _validation_request = {
                 "action": "validate_token",
                 "token": token,
-                "scopes": "water-usage:forecasts"
+                "scope": "water-usage:forecasts"
             }
             print(_validation_request)
             __msg_id, __msg_received = _amqp_security_client.publish_message(json.dumps(
