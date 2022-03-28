@@ -1,11 +1,12 @@
 """Module in which the server is described and all ops of the server are commenced in"""
 import json
 import logging
-import re
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
+import amqp_rpc_client
 from fastapi import Depends, FastAPI, File, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from py_eureka_client.eureka_client import EurekaClient
@@ -13,8 +14,6 @@ from sqlalchemy.orm import Session
 from starlette import status
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-
-import amqp_rpc_client
 
 import database
 import database.tables
@@ -24,7 +23,7 @@ import models.requests.enums
 from api.functions import district_in_spatial_unit, get_water_usage_data
 from database.tables.operations import get_commune_names, get_county_names, get_consumer_groups
 from exceptions import QueryDataError
-from models.amqp import TokenIntrospectionRequest, ForecastRequest, WaterUsages
+from models.amqp import TokenIntrospectionRequest, ForecastRequest
 from models.requests.enums import ConsumerGroup, ForecastType, SpatialUnit
 from settings import *
 
@@ -323,6 +322,7 @@ async def run_prognosis(
         'Consumer Group(s): %s',
         forecast_type, spatial_unit, districts, consumer_groups
     )
+    forecast_start = time.time()
     response_list = []
     calculations = {}
     for district in districts:
@@ -357,22 +357,22 @@ async def run_prognosis(
                 "district": district
             }
             calculations.update({__msg_id: calculation_data})
-    for message_id, calculation_data in calculations.items():
-        byte_response = _amqp_client.await_response(message_id, timeout=30)
-        
-        if byte_response is not None:
-            response: dict = json.loads(byte_response)
-            response.update({'name': calculation_data['district']})
-            response.update({'consumerGroup': calculation_data['consumer_group']})
-            response_list.append(response)
-        else:
-            response_list.append(
-                {
-                    "name": calculation_data['district'],
-                    "error": "calculation_module_response_timeout"
-                }
-            )
-    return response_list
+    while len(calculations) > 0:
+        for message_id, calculation_data in dict(calculations).items():
+            byte_response = _amqp_client.get_response(message_id)
+            if byte_response is not None:
+                response: dict = json.loads(byte_response)
+                response.update({'name': calculation_data['district']})
+                response.update({'consumerGroup': calculation_data['consumer_group']})
+                response_list.append(response)
+                calculations.pop(message_id)
+    return JSONResponse(
+        status_code=200,
+        headers={
+            'X-Forecast-Time': str(time.time() - forecast_start)
+        },
+        content=response_list
+    )
 
 
 @water_usage_forecasts_rest.put(
