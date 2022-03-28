@@ -17,11 +17,12 @@ from starlette.responses import JSONResponse, Response
 import amqp_rpc_client
 
 import database
+import database.tables
 import exceptions
 import imports
 import models.requests.enums
 from api.functions import district_in_spatial_unit, get_water_usage_data
-from database.tables.operations import get_commune_names, get_county_names
+from database.tables.operations import get_commune_names, get_county_names, get_consumer_groups
 from exceptions import QueryDataError
 from models.amqp import TokenIntrospectionRequest, ForecastRequest, WaterUsages
 from models.requests.enums import ConsumerGroup, ForecastType, SpatialUnit
@@ -71,7 +72,8 @@ async def startup():
     database.initialise_orm_models()
     # Create the client
     _amqp_client = amqp_rpc_client.Client(
-        _amqp_settings.dsn
+        _amqp_settings.dsn,
+        mute_pika=True
     )
 
 
@@ -152,14 +154,15 @@ async def authenticate_token_for_application(request: Request, next_action):
     _request_host_port = request.client.port
     # Log that we received a new request
     __logger.info('%s:%s - %s - Received new request for executing a water usage forecast',
-                  _request_id, _request_host, _request_host_port)
-    __logger.info('%s:%s - %s - Checking if the request is authorized and has the correct scope')
+                  _request_host, _request_host_port, _request_id)
+    __logger.info('%s:%s - %s - Checking if the request is authorized and has the correct scope',
+                  _request_host, _request_host_port, _request_id)
     # Get the value stored in the Authorization header
     _authorization_header_value: Optional[str] = headers.get('Authorization', None)
     # Check if the header was even present
     if _authorization_header_value is None:
         __logger.warning('%s:%s - %s - [R] The request did not contain the necessary credentials',
-                         _request_id, _request_host, _request_host_port)
+                         _request_host, _request_host_port, _request_id)
         return JSONResponse(
             status_code=400,
             content={
@@ -172,7 +175,7 @@ async def authenticate_token_for_application(request: Request, next_action):
     # Check if the Authorization scheme is bearer
     if ("Bearer" or "bearer") not in _authorization_header_value:
         __logger.error('%s:%s - %s - [R] The request contained an unsupported authorization scheme',
-                       _request_id, _request_host, _request_host_port)
+                       _request_host, _request_host_port, _request_id)
         return JSONResponse(
             status_code=400,
             content={
@@ -188,7 +191,8 @@ async def authenticate_token_for_application(request: Request, next_action):
     try:
         uuid.UUID(_user_token)
     except ValueError:
-        __logger.error('%s:%s - %s - [R] The Bearer token was malformed')
+        __logger.error('%s:%s - %s - [R] The Bearer token was malformed',
+                       _request_host, _request_host_port, _request_id)
         return JSONResponse(
             status_code=400,
             content={
@@ -198,7 +202,8 @@ async def authenticate_token_for_application(request: Request, next_action):
                 'WWW-Authenticate': 'Bearer error="invalid_request"'
             }
         )
-    __logger.info('%s:%s - %s - Requesting an introspection from the authorization service')
+    __logger.info('%s:%s - %s - Requesting an introspection from the authorization service',
+                  _request_host, _request_host_port, _request_id)
     # Request an introspection of the token from the authorization service
     _introspection_request = TokenIntrospectionRequest(
         bearer_token=_user_token
@@ -212,7 +217,7 @@ async def authenticate_token_for_application(request: Request, next_action):
                    _request_host, _request_host_port, _request_id, _introspection_id)
     __logger.info('%s:%s - %s - Awaiting the introspection result from the authorization service',
                   _request_host, _request_host_port, _request_id)
-    _introspection_response_bytes = _amqp_client.await_response(_introspection_id, timeout=10.0)
+    _introspection_response_bytes = _amqp_client.await_response(_introspection_id, timeout=5)
     if _introspection_response_bytes is None:
         __logger.error('%s:%s - %s - [R] The authorization service did not return an response in '
                        'a appropriate amount of time',
@@ -297,7 +302,7 @@ async def run_prognosis(
         spatial_unit: SpatialUnit,
         forecast_type: ForecastType,
         districts: list[str] = Query(default=..., alias='district'),
-        consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'),
+        consumer_groups: list[str] = Query(['all'], alias='consumerGroup'),
         db_connection: Session = Depends(database.get_database_session)
 ):
     """Run a new prognosis
@@ -308,17 +313,18 @@ async def run_prognosis(
     :type districts: str
     :param forecast_type: The model which shall be used during broadcasting
     :type forecast_type: ForecastType
-    :param consumer_group: The consumer group whose water usages shall be predicted, defaults to all
-    :type consumer_group: ConsumerGroup
+    :param consumer_groups: The consumer group whose water usages shall be predicted, defaults to all
+    :type consumer_groups: ConsumerGroup
     :param db_connection: Connection to the database used to do some queries
     :type db_connection: Session
     """
     __logger.info(
         'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, Districts: %s, '
         'Consumer Group(s): %s',
-        forecast_type, spatial_unit, districts, consumer_group
+        forecast_type, spatial_unit, districts, consumer_groups
     )
     response_list = []
+    calculations = {}
     for district in districts:
         # Check if the district is in the spatial unit
         if not district_in_spatial_unit(district, spatial_unit, db_connection):
@@ -327,27 +333,42 @@ async def run_prognosis(
                 "The district '{}' was not found in the spatial unit '{}'. Please check your "
                 'query'.format(district, spatial_unit)
             )
-        # Get the water usage data
-        __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
-        _request = ForecastRequest(
-            type=forecast_type,
-            usage_data=__water_usage_data
-        )
-        # Publish the request
-    
-        __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
-    
-        byte_response = _amqp_client.await_response(__msg_id, timeout=60)
+        if 'all' in consumer_groups:
+            consumer_groups = get_consumer_groups(db_connection)
+        else:
+            for consumer_group in consumer_groups:
+                if consumer_group not in get_consumer_groups(db_connection):
+                    raise QueryDataError(
+                        'consumer_group_invalid',
+                        "The consumer group '{}' was not found in the database. Please check your "
+                        "query".format(consumer_group)
+                    )
+        for consumer_group in consumer_groups:
+            # Get the water usage data
+            __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
+            _request = ForecastRequest(
+                type=forecast_type,
+                usage_data=__water_usage_data
+            )
+            # Publish the request
+            __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
+            calculation_data = {
+                "consumer_group": consumer_group,
+                "district": district
+            }
+            calculations.update({__msg_id: calculation_data})
+    for message_id, calculation_data in calculations.items():
+        byte_response = _amqp_client.await_response(message_id, timeout=30)
         
         if byte_response is not None:
-            response = json.loads(byte_response)
-            response.update({'name': district})
-            response.update({'consumerGroup': consumer_group.value})
+            response: dict = json.loads(byte_response)
+            response.update({'name': calculation_data['district']})
+            response.update({'consumerGroup': calculation_data['consumer_group']})
             response_list.append(response)
         else:
             response_list.append(
                 {
-                    "name": district,
+                    "name": calculation_data['district'],
                     "error": "calculation_module_response_timeout"
                 }
             )
@@ -401,10 +422,16 @@ async def get_available_parameters(db: Session = Depends(database.get_database_s
     :param db:
     :return:
     """
+    # Fetch all entries about the consumer groups
+    consumer_group_data = {}
+    for consumer_group in db.query(database.tables.ConsumerType).all():
+        consumer_group_data.update({
+            consumer_group.name: consumer_group.description
+        })
     response = {
         "communes": get_commune_names(db),
         "counties": get_county_names(db),
-        "consumerGroups": list(ConsumerGroup.__members__.values()),
+        "consumerGroups": consumer_group_data,
         "forecastTypes": list(ForecastType.__members__.values())
     }
     return response

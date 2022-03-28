@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from exceptions import DuplicateEntryError
 from database.tables import County, Commune, ConsumerType, WaterUsageAmount
-from database.tables.operations import get_commune_id, get_consumer_type_id, get_county_id, \
+from database.tables.operations import get_commune_id, get_county_id, \
     get_county_names, insert_object
 
 
@@ -215,5 +215,3 @@ def import_water_usages_from_file(
         _water_usage_amount = insert_object(_water_usage_amount, db_session)
         usage_values.append(_water_usage_amount)
     return usage_values
-
-

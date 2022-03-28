@@ -7,7 +7,7 @@ from models.requests import ConsumerGroup
 from .. import Commune, ConsumerType, County, WaterUsageAmount
 
 
-def get_consumer_group_id(consumer_group: ConsumerGroup, db: Session) -> Optional[int]:
+def get_consumer_group_id(consumer_group: str, db: Session) -> Optional[int]:
     """Get the ID of a consumer group
 
     :param consumer_group: Consumer Group Enumeration value for which the id should be looked up
@@ -16,23 +16,10 @@ def get_consumer_group_id(consumer_group: ConsumerGroup, db: Session) -> Optiona
     the database
     """
     try:
-        return db.query(ConsumerType).filter(ConsumerType.type == consumer_group.value).first().id
+        return db.query(ConsumerType).filter(ConsumerType.name == consumer_group).first().id
     except AttributeError:
         return None
-
-
-def get_consumer_type_id(consumer_type: str, db: Session) -> Optional[int]:
-    """Get the ID of a consumer group defined in the database
-
-    :param consumer_type: Consumer Type
-    :param db: Database connection
-    :return:
-    """
-    try:
-        return db.query(ConsumerType).filter(ConsumerType.name == consumer_type).first().id
-    except AttributeError:
-        return None
-
+    
 
 def get_commune_id(district, db):
     """Get the id (primary key) of the commune with the name supplied.
@@ -105,6 +92,15 @@ def get_county_names(db: Session) -> List[str]:
     return names
 
 
+def get_consumer_groups(db: Session) -> List[str]:
+    """Get the consumer groups present in the database"""
+    _consumer_groups: List[ConsumerType] = db.query(ConsumerType).all()
+    groups = []
+    for _consumer_group in _consumer_groups:
+        groups.append(_consumer_group.name)
+    return groups
+
+
 def insert_object(
         obj: Union[Commune, County, ConsumerType, WaterUsageAmount],
         db: Session
@@ -118,5 +114,3 @@ def insert_object(
     db.commit()
     db.refresh(obj)
     return obj
-
-

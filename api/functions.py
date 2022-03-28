@@ -3,12 +3,11 @@ import logging
 
 import pandas
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import functions as func
+import sqlalchemy.sql.functions as sql_func
 
-import database
+import database.tables.operations
 import models.amqp
-from database.tables import Commune, County, WaterUsageAmount, operations
-from models.requests import RealData
+from database.tables import Commune, County, WaterUsageAmount
 from models.requests.enums import ConsumerGroup, SpatialUnit
 
 __logger = logging.getLogger('API-FUNCS')
@@ -50,7 +49,7 @@ def get_water_usage_data(
         district: str,
         spatial_unit: SpatialUnit,
         db: Session,
-        consumer_group: ConsumerGroup = ConsumerGroup.ALL
+        consumer_group: str = ConsumerGroup.ALL.value
 ):
     """Get the water usage amounts per year
 
@@ -60,56 +59,74 @@ def get_water_usage_data(
     :param spatial_unit:
     :return:
     """
-    # Check if the consumer Group is not "all"
-    if consumer_group is ConsumerGroup.ALL:
-        __consumer_group_filter_value = '%'
-    else:
-        __consumer_group_filter_value = database.tables.operations.get_consumer_group_id(
-            consumer_group, db
+    # Check the spatial unit
+    if spatial_unit == SpatialUnit.COMMUNE:
+        # Get the ID of the consumer group
+        _consumer_group_id = database.tables.operations.get_consumer_group_id(consumer_group, db)
+        # Get the ID of the district
+        _district_id = database.tables.operations.get_commune_id(district, db)
+        # Get the water usage list
+        _water_usages_per_year = (
+            db
+            .query(WaterUsageAmount.year, sql_func.sum(WaterUsageAmount.value))
+            .filter(WaterUsageAmount.commune == _district_id)
+            .filter(WaterUsageAmount.consumer_type == _consumer_group_id)
+            .group_by(WaterUsageAmount.year)
+            .all()
         )
-    # Determine the spatial unit for the water usage amounts
-    if spatial_unit is SpatialUnit.COMMUNE:
-        # Get the foreign key value for the commune
-        __commune_filter_value = database.tables.operations.get_commune_id(district, db)
-        # Get the years and usage amounts
-        __usage_amounts_with_years = db \
-            .query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value)) \
-            .group_by(WaterUsageAmount.year) \
-            .filter(
-                WaterUsageAmount.commune == __commune_filter_value,
-                WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
-            ).all()
-        # Iterate through the paired valued to receive the usage amounts
-        __usage_amounts = []
-        for __usage_amount in __usage_amounts_with_years:
-            __usage_amounts.append(__usage_amount[1])
-        # Build the return value
+        # Now get extract the raw usages
+        _water_usage_amounts = []
+        for dataset in _water_usages_per_year:
+            # Since the dataset consists of tuples, access the sum only
+            _water_usage_amounts.append(dataset[1])
+        # Now return the usages
         return models.amqp.WaterUsages(
-            start=__usage_amounts_with_years[0][0],
-            end=__usage_amounts_with_years[-1][0],
-            usages=__usage_amounts
+            # The year is the first entry of the tuples
+            start=_water_usages_per_year[0][0],
+            # Access the last usage and access the year
+            end=_water_usages_per_year[-1][0],
+            usages=_water_usage_amounts
         )
     elif spatial_unit == SpatialUnit.COUNTY:
-        _communes = database.tables.operations.get_communes_in_county(district, db)
-        _data = {}
-        for commune_id in _communes:
-            _usages_with_years = db\
-                .query(WaterUsageAmount.year, func.sum(WaterUsageAmount.value))\
-                .group_by(WaterUsageAmount.year)\
-                .filter(
-                        WaterUsageAmount.commune == commune_id,
-                        WaterUsageAmount.consumer_type.like(__consumer_group_filter_value)
-                ).all()
-            _years = []
-            _usage_amounts = []
-            for usage_with_year in _usages_with_years:
-                _years.append(usage_with_year[0])
-                _usage_amounts.append(usage_with_year[1])
-            _data.update({commune_id: pandas.Series(_usage_amounts, _years)})
-        data_frame = pandas.DataFrame(_data)
-        usage_data: pandas.Series = data_frame.fillna(0).sum(axis='columns')
+        # Get the ID of the consumer group
+        _consumer_group_id = database.tables.operations.get_consumer_group_id(consumer_group, db)
+        # TODO: Query the data about which commune is within a county from the geo data service
+        # Get the district id of all districts within the county
+        _district_ids = database.tables.operations.get_communes_in_county(district, db)
+        # Create an empty data set for all districts
+        _district_usages: dict[int, pandas.Series] = {}
+        # Get the water usages per district
+        for _district_id in _district_ids:
+            # Get the water usages
+            _water_usages_per_year = (
+                db
+                .query(WaterUsageAmount.year, sql_func.sum(WaterUsageAmount.value))
+                .filter(WaterUsageAmount.commune == _district_id)
+                .filter(WaterUsageAmount.consumer_type == _consumer_group_id)
+                .group_by(WaterUsageAmount.year)
+                .all()
+            )
+            # Create a list for the years
+            _usage_years = []
+            # Create a list for the usage values
+            _usage_values = []
+            # Now populate the lists
+            for _water_usage_per_year in _water_usages_per_year:
+                _usage_years.append(_water_usage_per_year[0])
+                _usage_values.append(_water_usage_per_year[1])
+            # Now create a pandas Series and add it to the district usages
+            _district_usages.update(
+                {_district_id: pandas.Series(_usage_values, _usage_years)}
+            )
+        # After getting all data build a data frame from the district usages
+        district_usage_data = pandas.DataFrame(_district_usages)
+        # Now fill all None values with a zero and build the sum the columns
+        county_usage_data: pandas.Series = district_usage_data.fillna(0).sum(axis='columns')
+        # Now build the Water usage data
         return models.amqp.WaterUsages(
-            start=usage_data.keys()[0],
-            end=usage_data.keys()[-1],
-            usages=usage_data.tolist()
+            # The first entry of the series keys is the start of the data set
+            start=county_usage_data.keys()[0],
+            # The last entry of the series keys is the end of the data set
+            end=county_usage_data.keys()[-1],
+            usages=county_usage_data.tolist()
         )
