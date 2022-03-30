@@ -8,4 +8,4 @@ pika==1.2.0
 pandas==1.4.1
 python-multipart
 uvicorn~=0.17.6
-amqp_rpc_client~=1.1.2
+amqp_rpc_client~=1.1.3

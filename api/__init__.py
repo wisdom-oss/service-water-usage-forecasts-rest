@@ -145,6 +145,7 @@ async def authenticate_token_for_application(request: Request, next_action):
     :param request:
     :return: The response
     """
+    global _amqp_client
     # Access the request headers
     headers = request.headers
     # Check if a request id is present in the request to identify the request in the logs
@@ -207,11 +208,21 @@ async def authenticate_token_for_application(request: Request, next_action):
     _introspection_request = TokenIntrospectionRequest(
         bearer_token=_user_token
     )
-    # Transmit the request using the rpc client
-    _introspection_id = _amqp_client.send(
-        content=_introspection_request.json(by_alias=True),
-        exchange=_security_settings.authorization_exchange
-    )
+    try:
+        # Transmit the request using the rpc client
+        _introspection_id = _amqp_client.send(
+            content=_introspection_request.json(by_alias=True),
+            exchange=_security_settings.authorization_exchange
+        )
+    except Exception:
+        _amqp_client = amqp_rpc_client.Client(
+            _amqp_settings.dsn,
+            mute_pika=True
+        )
+        _introspection_id = _amqp_client.send(
+            content=_introspection_request.json(by_alias=True),
+            exchange=_security_settings.authorization_exchange
+        )
     __logger.debug('%s:%s - %s - Transmitted the introspection request (id: %s',
                    _request_host, _request_host_port, _request_id, _introspection_id)
     __logger.info('%s:%s - %s - Awaiting the introspection result from the authorization service',
@@ -317,6 +328,7 @@ async def run_prognosis(
     :param db_connection: Connection to the database used to do some queries
     :type db_connection: Session
     """
+    global _amqp_client
     __logger.info(
         'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, Districts: %s, '
         'Consumer Group(s): %s',
@@ -351,7 +363,15 @@ async def run_prognosis(
                 usage_data=__water_usage_data
             )
             # Publish the request
-            __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
+            try:
+                __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
+            except Exception:
+                _amqp_client = amqp_rpc_client.Client(
+                    _amqp_settings.dsn,
+                    mute_pika=True
+                )
+                __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
+
             calculation_data = {
                 "consumer_group": consumer_group,
                 "district": district
