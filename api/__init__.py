@@ -377,15 +377,29 @@ async def run_prognosis(
                 "district": district
             }
             calculations.update({__msg_id: calculation_data})
+            for message_id, calculation_data in dict(calculations).items():
+                byte_response = _amqp_client.get_response(message_id)
+                if byte_response is not None:
+                    response: dict = json.loads(byte_response)
+                    response.update({'name': calculation_data['district']})
+                    response.update({'consumerGroup': calculation_data['consumer_group']})
+                    response_list.append(response)
+                    calculations.pop(message_id)
     while len(calculations) > 0:
         for message_id, calculation_data in dict(calculations).items():
-            byte_response = _amqp_client.get_response(message_id)
+            byte_response = _amqp_client.await_response(message_id, 10)
             if byte_response is not None:
                 response: dict = json.loads(byte_response)
                 response.update({'name': calculation_data['district']})
                 response.update({'consumerGroup': calculation_data['consumer_group']})
                 response_list.append(response)
                 calculations.pop(message_id)
+            else:
+                response = {
+                    'name': calculation_data['district'],
+                    'error': 'calculation_response_timeout'
+                }
+                response_list.append(response)
     return JSONResponse(
         status_code=200,
         headers={
