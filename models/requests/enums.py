@@ -4,8 +4,8 @@ from enum import Enum
 
 class SpatialUnit(str, Enum):
     """Spatial Units supported by this Endpoint"""
-    COMMUNE = "commune"
-    COUNTY = "county"
+    COMMUNE = "municipalities"
+    COUNTY = "district"
 
 
 class ForecastType(str, Enum):
