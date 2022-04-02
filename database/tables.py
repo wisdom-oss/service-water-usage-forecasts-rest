@@ -1,8 +1,15 @@
 """Object-Relational-Mapping classes for the used database tables"""
-import sqlalchemy
 import sqlalchemy.orm
+from . import engine
 
 ORMDeclarationBase = sqlalchemy.orm.declarative_base(name='ORMDeclarationBase')
+
+
+def initialize_mappings():
+    """
+    Initialize the object-relational mapping classes for this service
+    """
+    ORMDeclarationBase.metadata.create_all(bind=engine())
 
 
 class Municipal(ORMDeclarationBase):
