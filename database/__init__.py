@@ -42,3 +42,4 @@ def engine() -> sqlalchemy.engine.Engine:
     :return: The database engine used to connect to the database
     :rtype: sqlalchemy.engine.Engine
     """
+    return _engine
