@@ -1,41 +1,42 @@
-"""Module for organizing the database connections and operations"""
+import logging
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker
+import sqlalchemy
+import sqlalchemy.engine
+import sqlalchemy.orm
 
-from settings import DatabaseSettings
-from .tables import TableBase
+import settings
 
-# Read the configuration of the service
-_database_settings = DatabaseSettings()
+_logger = logging.getLogger(__name__)
+_settings = settings.DatabaseSettings()
 
-# Create a new database engine
-__db_engine = create_engine(
-    _database_settings.dsn, pool_recycle=90
-)
+_engine = sqlalchemy.engine.create_engine(_settings.dsn, pool_recycle=90)
 
-# Create a Database Session used later on in the api
-DatabaseSession = sessionmaker(autocommit=False, autoflush=False, bind=__db_engine)
+_database_session = sqlalchemy.orm.sessionmaker(_engine)
 
 
-def get_database_session() -> DatabaseSession:
-    """Get an opened Database session which can be used to query data
+def session() -> sqlalchemy.orm.Session:
+    """
+    Get an opened session to the database
 
-        :return: Database Session
-        :rtype: DatabaseSession
-        """
-    db = DatabaseSession()
+    :return: The opened database session
+    :rtype: sqlalchemy.orm.Session
+    """
+    _logger.debug("Creating new database session")
+    _session: sqlalchemy.orm.Session = _database_session()
     try:
-        yield db
+        _logger.debug("Yielding the opened database session")
+        yield _session
     finally:
-        db.close()
-        
-
-def engine() -> Engine:
-    return __db_engine
+        _logger.debug("Closing the database session")
+        _session.close()
+        _logger.debug("Closed the database session")
 
 
-def initialise_orm_models():
-    """Initialize the ORM models and create the necessary metadata"""
-    TableBase.metadata.create_all(bind=__db_engine)
+def engine() -> sqlalchemy.engine.Engine:
+    """
+    Get the database engine
+
+    :return: The database engine used to connect to the database
+    :rtype: sqlalchemy.engine.Engine
+    """
+    return _engine

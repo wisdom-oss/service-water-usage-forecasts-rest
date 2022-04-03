@@ -96,11 +96,15 @@ Run a new prognosis
 #### put\_new\_datafile
 
 ```python
+import enums
+
+
 @water_usage_forecasts_rest.put(
     path='/import/{datatype}',
     status_code=201
 )
-async def put_new_datafile(datatype: models.requests.enums.ImportDataTypes, data: UploadFile = File(...), db_connection: Session = Depends(database.get_database_session))
+async def put_new_datafile(datatype: enums.ImportDataTypes, data: UploadFile = File(...),
+                           db_connection: Session = Depends(database.get_database_session))
 ```
 
 Import a new set of data into the database
@@ -127,4 +131,3 @@ Get all possible parameters
 **Arguments**:
 
 - `db`: 
-

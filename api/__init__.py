@@ -1,404 +1,346 @@
-"""Module in which the server is described and all ops of the server are commenced in"""
-import json
 import logging
+import json
 import re
+import time
+import pathlib
+import typing
 import uuid
-from pathlib import Path
-from typing import Optional
-
-from fastapi import Depends, FastAPI, File, Query, UploadFile
-from fastapi.exceptions import RequestValidationError
-from py_eureka_client.eureka_client import EurekaClient
-from sqlalchemy.orm import Session
-from starlette import status
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
 
 import amqp_rpc_client
+import fastapi
+import fastapi.exceptions
+import py_eureka_client.eureka_client
+import sqlalchemy.orm
+import starlette
+import starlette.requests
+import starlette.responses
 
+import api.functions
 import database
-import exceptions
-import imports
-import models.requests.enums
-from api.functions import district_in_spatial_unit, get_water_usage_data
-from database.tables.operations import get_commune_names, get_county_names
-from exceptions import QueryDataError
-from models.amqp import TokenIntrospectionRequest, ForecastRequest, WaterUsages
-from models.requests.enums import ConsumerGroup, ForecastType, SpatialUnit
-from settings import *
+import database.crud
+import database.tables
+import enums
+import models.amqp
+import settings
 
-water_usage_forecasts_rest = FastAPI()
-"""Fast API Application for this service"""
-# Create a logger for the api implementation
-__logger = logging.getLogger('HTTP')
-# Read all settings
-_service_settings = ServiceSettings()
-_registry_settings = ServiceRegistrySettings()
-_amqp_settings = AMQPSettings()
-_security_settings = SecuritySettings()
-# Create a private empty service registry client
-_registry_client: Optional[EurekaClient] = None
-# Create a private AMQPClient
-_amqp_client: Optional[amqp_rpc_client.Client] = None
+# Create a new logger for the api
+_logger = logging.getLogger(__name__)
+# Read the settings needed for the api (in this case all)
+_service_settings = settings.ServiceSettings()
+_registry_settings = settings.ServiceRegistrySettings()
+_amqp_settings = settings.AMQPSettings()
+_security_settings = settings.SecuritySettings()
+
+# Create a new FastAPI Application for the service
+service = fastapi.FastAPI()
+
+# Prepare global instances of the service registry client and the amqp client
+_registry_client: typing.Optional[py_eureka_client.eureka_client.EurekaClient] = None
+_amqp_client: typing.Optional[amqp_rpc_client.Client] = None
+
+# ==== API Methods below this line  ====
+
+# ===== Event Handler ======
 
 
-# Create a handler for the startup process
-@water_usage_forecasts_rest.on_event('startup')
-async def startup():
-    """Startup Event Handler
-
-    This event handler will automatically register this service at the service registry,
-    create the necessary databases and tables and will start a rpc client which will send
-    messages to the forecasting module
-
-    :return:
-    """
-    __logger.info("Registering the service at the service registry")
-    # Allow writing to the global client
+@service.on_event("startup")
+def _service_startup():
+    """Handler for the service startup"""
+    _logger.info("Starting the RESTful API")
+    _logger.debug("Accessing the global service registry client and AMQP RPC client")
+    # Access the global service registry client and amqp rpc client
     global _registry_client, _amqp_client
-    # Create a new service registry client
-    _registry_client = EurekaClient(
-        eureka_server=f'http://{_registry_settings.host}:{_registry_settings.port}',
+    # Initialize a new service registry client
+    _registry_client = py_eureka_client.eureka_client.EurekaClient(
+        eureka_server=f"http://{_registry_settings.host}:{_registry_settings.port}/",
         app_name=_service_settings.name,
         instance_port=_service_settings.http_port,
-        should_register=True,
-        renewal_interval_in_secs=5,
-        duration_in_secs=10
+        should_register=False,
+        should_discover=False,
+        renewal_interval_in_secs=1,
+        duration_in_secs=30,
     )
-    # Start the service registry client
-    #  __service_registry_client.start()
-    # Initialize the ORM models
-    database.initialise_orm_models()
-    # Create the client
-    _amqp_client = amqp_rpc_client.Client(
-        _amqp_settings.dsn
+    # Initialize a new AMQP Client
+    _amqp_client = amqp_rpc_client.Client(amqp_dsn=_amqp_settings.dsn, mute_pika=True)
+    # Start the service registry client and register the service
+    _registry_client.start()
+    _registry_client.register(py_eureka_client.eureka_client.INSTANCE_STATUS_STARTING)
+    # Initialize the database table mappings
+    database.tables.initialize_mappings()
+    _logger.info(
+        "Pre-Startup tasks finished. Settings instance status to active and allowing "
+        "requests"
     )
+    _registry_client.status_update(py_eureka_client.eureka_client.INSTANCE_STATUS_UP)
 
 
-# Handler for the shutdown process
-@water_usage_forecasts_rest.on_event('shutdown')
-async def shutdown():
-    """Shutdown event handler
-
-    This event handler will un-register the service from the service registry
-
-    :return:
-    """
-    global _registry_client
+@service.on_event("shutdown")
+def _service_shutdown():
+    """Handle the service shutdown"""
+    # Inform the service registry that the service is going offline and stop the eureka client
     _registry_client.stop()
 
 
-# Handler for validation errors, meaning the request was bad
-@water_usage_forecasts_rest.exception_handler(RequestValidationError)
-async def request_validation_error_handler(__request: Request, exc: RequestValidationError):
+# ===== Middlewares ======
+
+
+@service.middleware("http")
+async def _token_check(request: starlette.requests.Request, call_next):
     """
-    Error handler for request validation errors
+    Intercept every request made to this service and check if the request contains a Bearer token
+    and check if the bearer token has the correct scope for this service
 
-    These errors will occur if the request data is not valid. This error handler just changes the
-    status from 422 (Unprocessable Entity) to 400 (Bad Request)
+    :param request: The incoming request
+    :type request: starlette.requests.Request
+    :param call_next: The next action which shall be called to generate the response
+    :type call_next: callable
+    :return: The response which has been generated
+    :rtype: starlette.responses.Response
     """
-    return JSONResponse(
-        status_code=400,
-        content={
-            "errors": exc.errors()
-        }
-    )
-
-
-# Handler for errors in data which were validated later on
-@water_usage_forecasts_rest.exception_handler(QueryDataError)
-async def query_data_error_handler(_request: Request, exc: QueryDataError):
-    """Error handler for querying data which is not available
-
-    This error handler will return a status code 400 (Bad Request) alongside with some
-    information on the reason for the error
-    """
-    return JSONResponse(
-        status_code=400,
-        content={
-            "error":             exc.short_error,
-            "error_description": exc.error_description
-        }
-    )
-
-
-# Handler for errors in data which were validated later on
-@water_usage_forecasts_rest.exception_handler(exceptions.DuplicateEntryError)
-async def query_data_error_handler(_request: Request, exc: exceptions.DuplicateEntryError):
-    """Error handler for querying data which is not available
-
-    This error handler will return a status code 400 (Bad Request) alongside with some
-    information on the reason for the error
-    """
-    return Response(
-        status_code=409
-    )
-
-
-# ==== AUTHORIZATION MIDDLEWARE ====
-@water_usage_forecasts_rest.middleware('http')
-async def authenticate_token_for_application(request: Request, next_action):
-    """This middleware will validate the Authorization token present in the headers and reject
-    the request if none is present
-    
-    :param request:
-    :return: The response
-    """
-    # Access the request headers
-    print(request.url)
+    global _amqp_client
+    # Access the headers of the incoming request
     headers = request.headers
-    # Check if a request id is present in the request to identify the request in the logs
-    _request_id = headers.get('X-Request-ID', uuid.uuid4().hex)
-    _request_host = request.client.host
-    _request_host_port = request.client.port
-    # Log that we received a new request
-    __logger.info('%s:%s - %s - Received new request for executing a water usage forecast',
-                  _request_id, _request_host, _request_host_port)
-    __logger.info('%s:%s - %s - Checking if the request is authorized and has the correct scope')
-    # Get the value stored in the Authorization header
-    _authorization_header_value: Optional[str] = headers.get('Authorization', None)
-    # Check if the header was even present
-    if _authorization_header_value is None:
-        __logger.warning('%s:%s - %s - [R] The request did not contain the necessary credentials',
-                         _request_id, _request_host, _request_host_port)
-        return JSONResponse(
+    # Get the value of the Authorization header
+    authorization_header: typing.Optional[str] = headers.get("Authorization")
+    if authorization_header is None:
+        # Since no authorization header was set return a response indicating this error
+        return starlette.responses.Response(
             status_code=400,
-            content={
-                "error": "missing_authorization_header"
-            },
-            headers={
-                'WWW-Authenticate': 'Bearer error="invalid_request"'
-            }
+            headers={"WWW-Authenticate": "Bearer error=invalid_request"},
         )
-    # Check if the Authorization scheme is bearer
-    if ("Bearer" or "bearer") not in _authorization_header_value:
-        __logger.error('%s:%s - %s - [R] The request contained an unsupported authorization scheme',
-                       _request_id, _request_host, _request_host_port)
-        return JSONResponse(
+    # Strip any excess whitespaces from the header
+    authorization_header = authorization_header.strip()
+    # Since an Authorization header was found check if the header has a value
+    if len(authorization_header) == 0:
+        # Since the header has no value. Indicate that the request was invalid
+        return starlette.responses.Response(
             status_code=400,
-            content={
-                "error": "unsupported_authorization_scheme"
-            },
-            headers={
-                'WWW-Authenticate': 'Bearer error="invalid_request"'
-            }
+            headers={"WWW-Authenticate": "Bearer error=invalid_request"},
         )
-    # Remove the "Bearer" scheme from the header value
-    _user_token = _authorization_header_value.lower().replace('bearer', '').strip()
-    # Check if the bearer token is formatted like UUID
+    # Now check if the Authorization header either starts with "Bearer" or "bearer" or any lower
+    # and uppercase variant
+    if not re.match("Bearer", authorization_header, re.IGNORECASE):
+        # Since the header contained an unsupported authorization scheme, inform the client of
+        # this error
+        return starlette.responses.Response(
+            status_code=400,
+            headers={
+                "WWW-Authenticate": 'Bearer error="invalid_request",'
+                'error_description="Unsupported authorization scheme"'
+            },
+        )
+    # Since the header contained Bearer as authorization method extract the Bearer token from the
+    # header
+    bearer_token = authorization_header.lower().replace("bearer", "").strip()
+    # Now check if the bearer token is formatted like a UUID, which is the format issued by the
+    # authorization service
     try:
-        uuid.UUID(_user_token)
+        _ = uuid.UUID(bearer_token)
     except ValueError:
-        __logger.error('%s:%s - %s - [R] The Bearer token was malformed')
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "bearer_token_malformed"
-            },
-            headers={
-                'WWW-Authenticate': 'Bearer error="invalid_request"'
-            }
-        )
-    __logger.info('%s:%s - %s - Requesting an introspection from the authorization service')
-    # Request an introspection of the token from the authorization service
-    _introspection_request = TokenIntrospectionRequest(
-        bearer_token=_user_token
-    )
-    # Transmit the request using the rpc client
-    _introspection_id = _amqp_client.send(
-        content=_introspection_request.json(by_alias=True),
-        exchange=_security_settings.authorization_exchange
-    )
-    __logger.debug('%s:%s - %s - Transmitted the introspection request (id: %s',
-                   _request_host, _request_host_port, _request_id, _introspection_id)
-    __logger.info('%s:%s - %s - Awaiting the introspection result from the authorization service',
-                  _request_host, _request_host_port, _request_id)
-    _introspection_response_bytes = _amqp_client.await_response(_introspection_id, timeout=10.0)
-    if _introspection_response_bytes is None:
-        __logger.error('%s:%s - %s - [R] The authorization service did not return an response in '
-                       'a appropriate amount of time',
-                       _request_host, _request_host_port, _request_id)
-        return JSONResponse(
-            status_code=504,
-            content={
-                "error": "token_introspection_timeout"
-            },
-            headers={
-                'Retry-After': '10'
-            }
-        )
-    # Convert the introspection response into a dictionary
-    _introspection_response: dict = json.loads(_introspection_response_bytes)
-    # Check if the response contains the active key
-    if 'active' not in _introspection_response:
-        __logger.critical('%s:%s - %s - [R] The authorization service did not return a valid '
-                          'response',
-                          _request_host, _request_host_port, _request_id)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "token_introspection_failure"
-            },
-            headers={
-                'Retry-After': '15'
-            }
-        )
-    # Check if the active key indicated true
-    if _introspection_response.get('active') is False:
-        __logger.error('%s:%s - %s - The authorization service marked the bearer token as inactive',
-                       _request_host, _request_host_port, _request_id)
-        # Check if a generic answer is returned
-        if 'reason' not in _introspection_response:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": 'invalid_token'
-                },
-                headers={
-                    'WWW-Authenticate': 'Bearer error="invalid_token"'
-                }
-            )
-        if _introspection_response.get('reason') == 'token_error':
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": 'invalid_token'
-                },
-                headers={
-                    'WWW-Authenticate': 'Bearer error="invalid_token"'
-                }
-            )
-        if _introspection_response.get('reason') == 'insufficient_scope':
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "error": 'insufficient_scope'
-                },
-                headers={
-                    'WWW-Authenticate': 'Bearer error="insufficient_scope"'
-                }
-            )
-        return JSONResponse(
+        # Since the bearer token could not be converted to an uuid return a error to the end user
+        return starlette.responses.Response(
             status_code=401,
-            content={
-                "error": 'invalid_token'
-            },
-            headers={
-                'WWW-Authenticate': 'Bearer error="invalid_token"'
-            }
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
         )
-    # Since the token was validated successfully and is allowed to access this resource the
-    # request may be executed
-    return await next_action(request)
-    
-
-# Route for generating a new request
-@water_usage_forecasts_rest.get(path='/{spatial_unit}/{forecast_type}')
-async def run_prognosis(
-        spatial_unit: SpatialUnit,
-        forecast_type: ForecastType,
-        districts: list[str] = Query(default=..., alias='district'),
-        consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'),
-        db_connection: Session = Depends(database.get_database_session)
-):
-    """Run a new prognosis
-
-    :param spatial_unit: Selected spatial unit
-    :type spatial_unit: SpatialUnit
-    :param districts: The district in the selected spatial unit
-    :type districts: str
-    :param forecast_type: The model which shall be used during broadcasting
-    :type forecast_type: ForecastType
-    :param consumer_group: The consumer group whose water usages shall be predicted, defaults to all
-    :type consumer_group: ConsumerGroup
-    :param db_connection: Connection to the database used to do some queries
-    :type db_connection: Session
-    """
-    __logger.info(
-        'Got new request for forecast:Forecast type: %s, Spatial Unit: %s, Districts: %s, '
-        'Consumer Group(s): %s',
-        forecast_type, spatial_unit, districts, consumer_group
+    # Since the bearer token passed all checks send a introspection request to determine if the
+    # token has the correct scope for accessing this service
+    introspection_request = models.amqp.TokenIntrospectionRequest(
+        bearer_token=bearer_token
     )
-    responses = {}
-    for district in districts:
-        # Check if the district is in the spatial unit
-        if not district_in_spatial_unit(district, spatial_unit, db_connection):
-            raise QueryDataError(
-                "district_not_found",
-                "The district '{}' was not found in the spatial unit '{}'. Please check your "
-                'query'.format(district, spatial_unit)
-            )
-        # Get the water usage data
-        __water_usage_data = get_water_usage_data(district, spatial_unit, db_connection, consumer_group)
-        _request = ForecastRequest(
-            type=forecast_type,
-            usage_data=__water_usage_data
+    # Try sending the request and check for any errors which may occur
+    try:
+        _introspection_request_id = _amqp_client.send(
+            introspection_request.json(by_alias=True),
+            _security_settings.authorization_exchange,
         )
-        # Publish the request
-    
-        __msg_id = _amqp_client.send(_request.json(), _amqp_settings.exchange)
-    
-        response = _amqp_client.await_response(__msg_id, timeout=60)
-        if response is not None:
-            responses.update({district: json.loads(response)})
-        else:
-            responses.update({district: {
-                    "error": "calculation_module_response_timeout"
-                }})
-    return responses
+    except Exception:
+        _logger.warning(
+            "A error occurred while sending the token introspection request. Trying "
+            "again with a new AMQP RPC Client"
+        )
+        _amqp_client = amqp_rpc_client.Client(
+            amqp_dsn=_amqp_settings.dsn, mute_pika=True
+        )
+        _introspection_request_id = _amqp_client.send(
+            introspection_request.json(by_alias=True),
+            _security_settings.authorization_exchange,
+        )
+    # Wait a maximum amount of five seconds for the response
+    raw_introspection_response = _amqp_client.await_response(
+        _introspection_request_id, timeout=5
+    )
+    if raw_introspection_response is None:
+        return starlette.responses.JSONResponse(
+            status_code=503,
+            content={
+                "error": "token_introspection_timeout",
+                "error_description": "The Bearer token included in the request could not be "
+                "validated in a appropriate amount of time. Please try again "
+                "later",
+            },
+            headers={"Retry-After": "30"},
+        )
+    # Since a response was returned try to parse it into a JSON object
+    try:
+        introspection_response: dict = json.loads(raw_introspection_response)
+    except json.JSONDecodeError:
+        return starlette.responses.JSONResponse(
+            status_code=503,
+            content={
+                "error": "token_introspection_error",
+                "error_description": "The token introspection could not be read successfully. The "
+                "request is cancelled to secure the service",
+            },
+            headers={"Retry-After": "30"},
+        )
+    # Now check if the response indicates if the token is valid
+    token_valid = introspection_response.get("active", None)
+    if token_valid is None:
+        return starlette.responses.JSONResponse(
+            status_code=503,
+            content={
+                "error": "token_introspection_error",
+                "error_description": "The token introspection could not be read successfully. The "
+                "request is cancelled to secure the service",
+            },
+            headers={"Retry-After": "30"},
+        )
+    if token_valid is not True:
+        return starlette.responses.Response(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+    # Since the token is valid let the request continue and return the response
+    request_response = await call_next(request)
+    return request_response
 
 
-@water_usage_forecasts_rest.put(
-    path='/import/{datatype}',
-    status_code=201
-)
-async def put_new_datafile(
-        datatype: models.requests.enums.ImportDataTypes,
-        data: UploadFile = File(...),
-        db_connection: Session = Depends(database.get_database_session)
+# ===== Routes =====
+
+
+@service.get(path="/{spatial_unit}/{forecast_model}")
+async def forecast(
+    spatial_unit: enums.SpatialUnit,
+    forecast_model: enums.ForecastModel,
+    districts: list[str] = fastapi.Query(default=..., alias="district"),
+    consumer_groups: list[str] = fastapi.Query(default=None, alias="consumerGroup"),
+    session: sqlalchemy.orm.Session = fastapi.Depends(database.session),
 ):
-    """Import a new set of data into the database
-
-    :param db_connection:
-    :param datatype: The type of data which shall be imported
-    :param data: The file which shall be imported
-    :return: If the request was a success it will send a 201 code back
     """
-    print(data.filename)
-    # Create a file id
-    file_id: str = uuid.uuid4().hex
-    # Write the uploaded file into ./tmp/file_id.csv
-    tmp_folder = Path('./.tmp')
-    # Create the folder and ignore if it already exists
-    tmp_folder.mkdir(parents=True, exist_ok=True)
-    _tmp_file_name = f'./.tmp/{file_id}.csv'
-    with open(_tmp_file_name, 'wb+') as tmp_file:
-        tmp_file.write(await data.read())
-    # Now check the datatype which shall be uploaded
-    if datatype == models.requests.enums.ImportDataTypes.COMMUNES:
-        imports.csv.import_communes_from_file(_tmp_file_name, db_connection)
-    elif datatype == models.requests.enums.ImportDataTypes.COUNTIES:
-        imports.csv.import_counties_from_file(_tmp_file_name, db_connection)
-    elif datatype == models.requests.enums.ImportDataTypes.CONSUMER_TYPES:
-        imports.csv.import_consumer_types_from_file(_tmp_file_name, db_connection)
-    elif datatype == models.requests.enums.ImportDataTypes.USAGES:
-        imports.csv.import_water_usages_from_file(_tmp_file_name, db_connection)
-    else:
-        return Response(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+    Execute a new forecast
 
-
-# Route for getting information about the possible parameters
-@water_usage_forecasts_rest.get('/')
-async def get_available_parameters(db: Session = Depends(database.get_database_session)):
-    """Get all possible parameters
-
-    :param db:
-    :return:
+    :param spatial_unit: The spatial unit used for the request
+    :type spatial_unit: enums.SpatialUnit
+    :param forecast_model: The forecast model which shall be used
+    :type forecast_model: enums.ForecastModel
+    :param districts: The districts that shall be used for the forecasts
+    :type districts: list[str]
+    :param consumer_groups: Consumer Groups which shall be included in the forecasts. If no
+        consumer group was transmitted the forecast will be executed for all consumer groups and
+        values with no consumer groups
+    :type consumer_groups: list[str], optional
+    :param session: The session used to access the database
+    :type session: sqlalchemy.orm.Session
+    :return: A list with the results of the forecast
+    :rtype: list[dict]
     """
-    response = {
-        "communes": get_commune_names(db),
-        "counties": get_county_names(db),
-        "consumerGroups": list(ConsumerGroup.__members__.values()),
-        "forecastTypes": list(ForecastType.__members__.values())
-    }
-    return response
+    # Save the current time to add it to the response headers
+    forecast_start = time.time()
+    # Create an empty list containing the forecast results
+    forecast_results = []
+    # Create a dictionary for collecting all sent forecast calculation requests
+    calculation_requests = {}
+    # Check if the spatial unit is for the municipalities or the districts
+    if spatial_unit == enums.SpatialUnit.DISTRICTS:
+        # TODO: Access the geo data service and get the municipals within the district
+        #   Afterwards set a indicator to sum up the usage values
+        pass
+    for district in districts:
+        if database.crud.get_municipal(district, session) is None:
+            # Since the municipal is not in the database add this as a hint to the responses
+            forecast_results.append(
+                {
+                    "name": district,
+                    "error": "This district is not the database. Please check your query",
+                }
+            )
+        else:
+            # Now iterate through the consumer groups that were sent and filter those not in the
+            # database
+            if consumer_groups is None:
+                consumer_groups = [
+                    c.name for c in database.crud.get_consumer_groups(session)
+                ]
+            for consumer_group in consumer_groups:
+                if database.crud.get_consumer_group(consumer_group, session) is None:
+                    forecast_results.append(
+                        {
+                            "name": district,
+                            "consumerGroup": consumer_group,
+                            "error": "The supplied consumer group is not configured",
+                        }
+                    )
+                else:
+                    # Since the district and consumer group is in the database get the water
+                    # usages for the consumer group
+                    consumer_group_id = database.crud.get_consumer_group(
+                        consumer_group, session
+                    ).id
+                    municipal_id = database.crud.get_municipal(district, session).id
+                    usage_data = functions.get_water_usage_data(
+                        municipal_id, consumer_group_id, session
+                    )
+                    # Now generate a new request
+                    forecast_request = models.amqp.ForecastRequest(
+                        usage_data=usage_data,
+                        type=forecast_model
+                    )
+                    # Now publish the forecast request
+                    forecast_request_id = _amqp_client.send(
+                        forecast_request.json(), _amqp_settings.exchange
+                    )
+                    # Store the forecast request id and the consumer group and district
+                    forecast_data = {
+                        'consumer_group': consumer_group,
+                        'municipal': district
+                    }
+                    calculation_requests.update({forecast_request_id: forecast_data})
+                    # Now check if any response has already been sent
+                    for request_id, request_data in dict(calculation_requests).items():
+                        byte_response = _amqp_client.get_response(request_id)
+                        if byte_response is not None:
+                            response: dict = json.loads(byte_response)
+                            # Now add the name and the consumer group to the response
+                            response.update({
+                                'name': request_data['municipal'],
+                                'consumerGroup': request_data['consumer_group']
+                            })
+                            # Now add the response to the list of responses
+                            forecast_results.append(response)
+                            calculation_requests.pop(request_id)
+    while len(calculation_requests) > 0:
+        for request_id, request_data in dict(calculation_requests).items():
+            byte_response = _amqp_client.await_response(request_id, timeout=5.0)
+            if byte_response is not None:
+                response: dict = json.loads(byte_response)
+                # Now add the name and the consumer group to the response
+                response.update({
+                    'name':          request_data['municipal'],
+                    'consumerGroup': request_data['consumer_group']
+                })
+                # Now add the response to the list of responses
+                forecast_results.append(response)
+                calculation_requests.pop(request_id)
+            else:
+                forecast_results.append({
+                    'name': request_data['municipal'],
+                    'consumerGroup': request_data['consumer_group'],
+                    'error': 'calculation_module_timeout'
+                })
+    return starlette.responses.JSONResponse(
+        status_code=200,
+        headers={
+            'X-Forecast-Duration': str(time.time() - forecast_start)
+        },
+        content=forecast_results
+    )

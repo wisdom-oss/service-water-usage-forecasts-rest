@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 class APIException(Exception):
     """Base class for all custom exceptions for using the Http API"""
+
     pass
 
 
@@ -11,6 +12,7 @@ class DuplicateEntryError(IntegrityError):
     """
     A INSERT operation failed since a constraint (e.g. unique or primary key) was violated
     """
+
     def __init__(self):
         pass
 
