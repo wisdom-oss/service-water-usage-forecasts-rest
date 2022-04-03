@@ -10,13 +10,17 @@ from sqlalchemy.orm import Session
 
 from exceptions import DuplicateEntryError
 from database.tables import County, Commune, ConsumerType, WaterUsageAmount
-from database.tables.operations import get_commune_id, get_county_id, \
-    get_county_names, insert_object
+from database.tables.operations import (
+    get_commune_id,
+    get_consumer_type_id,
+    get_county_id,
+    get_county_names,
+    insert_object,
+)
 
 
 def import_counties_from_file(
-        file_path: Union[str, bytes, os.PathLike],
-        db_session: Session
+    file_path: Union[str, bytes, os.PathLike], db_session: Session
 ) -> List[County]:
     """Import a set of counties into the database
 
@@ -39,7 +43,7 @@ def import_counties_from_file(
         names=["County"],
         usecols=["County"],
         dtype=str,
-        squeeze=True
+        squeeze=True,
     )
     # Iterate though the series of counties and save the counties into a list
     counties: List[County] = []
@@ -48,17 +52,14 @@ def import_counties_from_file(
         __county = County(name=county)
         try:
             __county = insert_object(__county, db_session)
-            counties.append(
-                __county
-            )
+            counties.append(__county)
         except IntegrityError:
             raise DuplicateEntryError
     return counties
 
 
 def import_communes_from_file(
-        file_path: Union[str, bytes, os.PathLike],
-        db_session: Session
+    file_path: Union[str, bytes, os.PathLike], db_session: Session
 ) -> List[Commune]:
     """Import communes into the database
 
@@ -82,10 +83,12 @@ def import_communes_from_file(
         names=["Commune", "County"],
         usecols=["Commune", "County"],
         dtype=object,
-        squeeze=False
+        squeeze=False,
     )
     # Replace missing values with none
-    commune_data_frame = commune_data_frame.where(pandas.notnull(commune_data_frame), None)
+    commune_data_frame = commune_data_frame.where(
+        pandas.notnull(commune_data_frame), None
+    )
     # Iterate though the rows
     communes: List[Commune] = []
     for row in commune_data_frame.itertuples():
@@ -94,14 +97,10 @@ def import_communes_from_file(
 
         if _county_name is not None:
             _commune = Commune(
-                name=_commune_name,
-                in_county=get_county_id(_county_name, db_session)
+                name=_commune_name, in_county=get_county_id(_county_name, db_session)
             )
         else:
-            _commune = Commune(
-                name=_commune_name,
-                in_county=None
-            )
+            _commune = Commune(name=_commune_name, in_county=None)
         try:
             _commune = insert_object(_commune, db_session)
         except IntegrityError:
@@ -111,8 +110,7 @@ def import_communes_from_file(
 
 
 def import_consumer_types_from_file(
-        file_path: Union[str, bytes, os.PathLike],
-        db_session: Session
+    file_path: Union[str, bytes, os.PathLike], db_session: Session
 ) -> List[ConsumerType]:
     """Import new consumer types from a csv file
 
@@ -135,12 +133,11 @@ def import_consumer_types_from_file(
         names=["Name", "Description"],
         usecols=["Name", "Description"],
         dtype=object,
-        squeeze=False
+        squeeze=False,
     )
     # Replace the missing values with an empty string
     consumer_type_data_frame.where(
-        pandas.notnull(consumer_type_data_frame), '',
-        inplace=True
+        pandas.notnull(consumer_type_data_frame), "", inplace=True
     )
     # Get a new database session
     # Create a list for the inserted consumer types and iterate through the data frame's rows
@@ -150,8 +147,7 @@ def import_consumer_types_from_file(
         _consumer_type_description = row[2]
 
         _consumer_type = ConsumerType(
-            name=_consumer_type_name,
-            description=_consumer_type_description
+            name=_consumer_type_name, description=_consumer_type_description
         )
         try:
             _consumer_type = insert_object(_consumer_type, db_session)
@@ -162,8 +158,7 @@ def import_consumer_types_from_file(
 
 
 def import_water_usages_from_file(
-        file_path: Union[str, bytes, os.PathLike],
-        db_session: Session
+    file_path: Union[str, bytes, os.PathLike], db_session: Session
 ) -> List[WaterUsageAmount]:
     """Import new water usages from a csv file
 
@@ -186,14 +181,12 @@ def import_water_usages_from_file(
         names=["Commune", "ConsumerType", "Value", "Year"],
         usecols=["Commune", "ConsumerType", "Value", "Year"],
         dtype=object,
-        squeeze=False
+        squeeze=False,
     )
     # Replace missing years with the current one
     current_year = datetime.date.today().year
     usage_value_data_frame.where(
-        pandas.notnull(usage_value_data_frame),
-        None,
-        inplace=True
+        pandas.notnull(usage_value_data_frame), None, inplace=True
     )
     # Get a database session
     usage_values: List[WaterUsageAmount] = []
@@ -210,7 +203,7 @@ def import_water_usages_from_file(
             commune=get_commune_id(_usage_location, db_session),
             consumer_type=get_consumer_type_id(_usage_type, db_session),
             value=_usage_amount,
-            year=_usage_year
+            year=_usage_year,
         )
         _water_usage_amount = insert_object(_water_usage_amount, db_session)
         usage_values.append(_water_usage_amount)
