@@ -84,6 +84,7 @@ def _service_shutdown():
 
 
 # ===== Middlewares ======
+"""
 @service.middleware("http")
 async def _caching_check(request: starlette.requests.Request, call_next):
     # Get the forecast parameters
@@ -143,7 +144,7 @@ async def _caching_check(request: starlette.requests.Request, call_next):
         "Last-Modified", email.utils.format_datetime(last_database_update)
     )
     return request_response
-
+"""
 
 @service.middleware("http")
 async def _token_check(request: starlette.requests.Request, call_next):
