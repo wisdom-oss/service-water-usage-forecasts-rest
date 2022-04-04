@@ -1,7 +1,6 @@
-import logging
+import datetime
 
 import amqp_rpc_client
-import pandas
 import sqlalchemy.sql.functions
 
 import database.crud
@@ -32,3 +31,17 @@ def get_water_usage_data(municipal_id, consumer_group_id, session):
     return models.amqp.WaterUsages(
         start=usages[0][0], end=usages[-1][0], usages=usage_values
     )
+
+
+def get_last_database_update(
+    schema_name: str, engine: sqlalchemy.engine.Engine
+) -> datetime.datetime:
+    query = (
+        f"SELECT UPDATE_TIME "
+        f"FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{schema_name}' "
+        f"ORDER BY UPDATE_TIME DESC LIMIT 1;"
+    )
+    result = engine.execute(query)
+    for time in result:
+        return time[0]
