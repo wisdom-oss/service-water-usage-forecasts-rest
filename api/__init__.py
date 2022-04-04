@@ -1,13 +1,16 @@
-import logging
+import datetime
+import email.utils
+import hashlib
 import json
+import logging
 import re
 import time
-import pathlib
 import typing
+import urllib.parse
 import uuid
+import pytz
 
 import amqp_rpc_client
-import fastapi
 import fastapi.exceptions
 import py_eureka_client.eureka_client
 import sqlalchemy.orm
@@ -82,6 +85,65 @@ def _service_shutdown():
 
 
 # ===== Middlewares ======
+@service.middleware("http")
+async def _caching_check(request: starlette.requests.Request, call_next):
+    # Get the forecast parameters
+    request_path = request.url.path
+    raw_request_parameter = str(request.query_params)
+    # Now parse the raw request parameters
+    request_parameter = urllib.parse.parse_qs(raw_request_parameter)
+    forecast_spatial_unit = request_path.split("/")[1]
+    forecast_model = request_path.split("/")[2]
+    forecast_districts = request_parameter.get("district", [])
+    forecast_consumer_groups = request_parameter.get("consumerGroup", [])
+    # Now sort the districts and consumer groups
+    forecast_districts = sorted(forecast_districts)
+    forecast_consumer_groups = sorted(forecast_consumer_groups)
+    # Now put that all into a dict
+    forecast_parameter = {
+        "spatialUnit": forecast_spatial_unit,
+        "forecastModel": forecast_model,
+        "districts": forecast_districts,
+        "consumerGroups": forecast_consumer_groups,
+    }
+    # Now jsonify the parameters
+    forecast_parameter_json = json.dumps(
+        forecast_parameter, ensure_ascii=False, sort_keys=False
+    )
+    # Now create the hashsum of the parameters
+    forecast_request_hash = hashlib.md5(
+        forecast_parameter_json.encode("utf-8")
+    ).hexdigest()
+    # Now get the time of the last update to any of the tables in the system
+    last_database_update = functions.get_last_database_update(
+        "water_usage", database.engine()
+    )
+    # Make the database update time timezone aware
+    last_database_update = pytz.UTC.localize(last_database_update)
+    # Now get the value of the "If-None-Match" and "If-Modified-Since" headers
+    e_tag = request.headers.get("If-None-Match")
+    data_last_modification = request.headers.get("If-Modified-Since")
+    # Now parse the last_update to a python datetime object
+    if data_last_modification is None:
+        last_known_update = datetime.datetime.fromtimestamp(0, tz=pytz.UTC)
+    else:
+        last_known_update = email.utils.parsedate_to_datetime(data_last_modification)
+    e_tag_matches_request = e_tag == forecast_request_hash
+    database_updated = last_known_update < last_database_update
+    if e_tag_matches_request and not database_updated:
+        return starlette.responses.Response(
+            status_code=304,
+            headers={
+                "ETag": forecast_request_hash,
+                "Last-Modified": email.utils.format_datetime(last_database_update),
+            },
+        )
+    request_response: starlette.responses.Response = await call_next(request)
+    request_response.headers.append("ETag", forecast_request_hash)
+    request_response.headers.append(
+        "Last-Modified", email.utils.format_datetime(last_database_update)
+    )
+    return request_response
 
 
 @service.middleware("http")
@@ -292,8 +354,7 @@ async def forecast(
                     )
                     # Now generate a new request
                     forecast_request = models.amqp.ForecastRequest(
-                        usage_data=usage_data,
-                        type=forecast_model
+                        usage_data=usage_data, type=forecast_model
                     )
                     # Now publish the forecast request
                     forecast_request_id = _amqp_client.send(
@@ -301,8 +362,8 @@ async def forecast(
                     )
                     # Store the forecast request id and the consumer group and district
                     forecast_data = {
-                        'consumer_group': consumer_group,
-                        'municipal': district
+                        "consumer_group": consumer_group,
+                        "municipal": district,
                     }
                     calculation_requests.update({forecast_request_id: forecast_data})
                     # Now check if any response has already been sent
@@ -311,10 +372,12 @@ async def forecast(
                         if byte_response is not None:
                             response: dict = json.loads(byte_response)
                             # Now add the name and the consumer group to the response
-                            response.update({
-                                'name': request_data['municipal'],
-                                'consumerGroup': request_data['consumer_group']
-                            })
+                            response.update(
+                                {
+                                    "name": request_data["municipal"],
+                                    "consumerGroup": request_data["consumer_group"],
+                                }
+                            )
                             # Now add the response to the list of responses
                             forecast_results.append(response)
                             calculation_requests.pop(request_id)
@@ -324,23 +387,25 @@ async def forecast(
             if byte_response is not None:
                 response: dict = json.loads(byte_response)
                 # Now add the name and the consumer group to the response
-                response.update({
-                    'name':          request_data['municipal'],
-                    'consumerGroup': request_data['consumer_group']
-                })
+                response.update(
+                    {
+                        "name": request_data["municipal"],
+                        "consumerGroup": request_data["consumer_group"],
+                    }
+                )
                 # Now add the response to the list of responses
                 forecast_results.append(response)
                 calculation_requests.pop(request_id)
             else:
-                forecast_results.append({
-                    'name': request_data['municipal'],
-                    'consumerGroup': request_data['consumer_group'],
-                    'error': 'calculation_module_timeout'
-                })
+                forecast_results.append(
+                    {
+                        "name": request_data["municipal"],
+                        "consumerGroup": request_data["consumer_group"],
+                        "error": "calculation_module_timeout",
+                    }
+                )
     return starlette.responses.JSONResponse(
         status_code=200,
-        headers={
-            'X-Forecast-Duration': str(time.time() - forecast_start)
-        },
-        content=forecast_results
+        headers={"X-Forecast-Duration": str(time.time() - forecast_start)},
+        content=forecast_results,
     )
