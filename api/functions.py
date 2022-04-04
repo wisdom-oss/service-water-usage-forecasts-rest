@@ -44,6 +44,6 @@ def get_last_database_update(
         f"ORDER BY UPDATE_TIME DESC LIMIT 1;"
     )
     result = engine.execute(query)
-    logging.info(result)
     for time in result:
-        return time[0]
+        logging.info(time)
+        return time
