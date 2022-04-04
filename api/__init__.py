@@ -122,12 +122,12 @@ async def _caching_check(request: starlette.requests.Request, call_next):
     last_database_update = pytz.UTC.localize(last_database_update)
     # Now get the value of the "If-None-Match" and "If-Modified-Since" headers
     e_tag = request.headers.get("If-None-Match")
-    last_known_update_http = request.headers.get("If-Modified-Since")
+    data_last_modification = request.headers.get("If-Modified-Since")
     # Now parse the last_update to a python datetime object
-    if last_known_update_http is None:
-        last_known_update = datetime.datetime.now(tz=pytz.UTC)
+    if data_last_modification is None:
+        last_known_update = datetime.datetime.fromtimestamp(0, tz=pytz.UTC)
     else:
-        last_known_update = email.utils.parsedate_to_datetime(last_known_update_http)
+        last_known_update = email.utils.parsedate_to_datetime(data_last_modification)
     e_tag_matches_request = e_tag == forecast_request_hash
     database_updated = last_known_update < last_database_update
     if e_tag_matches_request and not database_updated:
