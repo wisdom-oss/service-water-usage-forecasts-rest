@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 import amqp_rpc_client
 import sqlalchemy.sql.functions
@@ -43,6 +44,6 @@ def get_last_database_update(
         f"ORDER BY UPDATE_TIME DESC LIMIT 1;"
     )
     result = engine.execute(query)
-    print(result)
+    logging.info(result)
     for time in result:
         return time[0]

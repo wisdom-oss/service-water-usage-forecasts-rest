@@ -1,5 +1,4 @@
 """Module for custom Exceptions for generating error messages"""
-from sqlalchemy.exc import IntegrityError
 
 
 class APIException(Exception):
