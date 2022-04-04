@@ -65,9 +65,7 @@ class WaterUsages(BaseModel):
 
 
 class ForecastRequest(BaseModel):
-    type: enums.ForecastModel = pydantic.Field(
-        default=..., alias="forecastType"
-    )
+    type: enums.ForecastModel = pydantic.Field(default=..., alias="forecastType")
     """
     Forecast Type
 

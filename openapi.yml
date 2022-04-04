@@ -5,6 +5,17 @@ info:
 
 components:
   schemas:
+    WaterUsage:
+      type: object
+      properties:
+        startYear:
+          type: integer
+        endYear:
+          type: integer
+        usageAmounts:
+          type: array
+          items:
+            type: number
     ForecastType:
       type: string
       enum:
@@ -54,7 +65,7 @@ paths:
                     items:
                       type: string
 
-  /{spatialUnit}/{district}/{forecastModel}:
+  /{spatialUnit}/{forecastModel}:
     get:
       summary: Run a new Prognosis and get the data of it
       parameters:
@@ -66,9 +77,11 @@ paths:
             enum:
               - commune
               - county
-        - in: path
+        - in: query
           name: district
           required: true
+          style: form
+          explode: true
           description: District of the spatial Unit for which the forecast should be run
           schema:
             type: string
@@ -95,47 +108,30 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  forecastType:
-                    $ref: '#/components/schemas/ForecastType'
-                  consumerGroup:
-                    $ref: '#/components/schemas/ConsumerGroup'
-                  reference:
-                    type: object
-                    properties:
-                      start:
-                        type: integer
-                        description: Year from which the first real data water usage is taken from
-                      end:
-                        type: integer
-                        description: Last year included in the water usage data
-                      usageAmounts:
-                        type: array
-                        items:
-                          type: number
-                  forecast:
-                    type: object
-                    properties:
-                      start:
-                        type: integer
-                        description: Year in wich the forecast starts being predicted (01.01.)
-                      timePeriod:
-                        type: integer
-                        description: Years in the forecast
-                      equation:
-                        type: string
-                        description: Equation used to predict the forecast values
-                      score:
-                        type: number
-                        description: Coefficient of determination for matching the real data with the equation
-                      usageAmounts:
-                        type: array
-                        description: Predicted water usage amounts
-                        minLength: 10
-                        maxLength: 10
-                        items:
-                          type: number
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      required: true
+                      description: The name of the district that was selected
+                    consumerGroup:
+                      type: string
+                      required: true
+                    forecastType:
+                      type: string
+                      required: true
+                    forecastEquation:
+                      type: string
+                      required: true
+                    forecastScore:
+                      type: number
+                      required: true
+                    forecastUsages:
+                      $ref: "#/components/schemas/WaterUsage"
+                    referenceUsages:
+                      $ref: "#/components/schemas/WaterUsage"
 
   /import/{dataType}:
     parameters:

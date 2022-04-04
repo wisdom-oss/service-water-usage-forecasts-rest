@@ -9,7 +9,6 @@ import uvicorn as uvicorn
 from pydantic import ValidationError
 
 import database.tables
-import imports.csv
 import tools
 from settings import *
 
@@ -141,32 +140,12 @@ if __name__ == "__main__":
         # Create a new database session
         _session = next(database.get_database_session())
         # Insert the example values into the database
-        logging.info("Importing the predefined counties from ./data/counties.csv")
-        imports.csv.import_counties_from_file("./data/counties.csv", _session)
-        logging.info("Imported the predefined counties from ./data/counties.csv")
-        logging.info("Importing the predefined communes from ./data/communes.csv")
-        imports.csv.import_communes_from_file("./data/communes.csv", _session)
-        logging.info("Imported the predefined communes from ./data/communes.csv")
-        logging.info(
-            "Importing the predefined consumer types from ./data/consumer-types.csv"
-        )
-        imports.csv.import_consumer_types_from_file(
-            "./data/consumer-types.csv", _session
-        )
-        logging.info("Imported the predefined consumer types from ./data/communes.csv")
-        logging.info(
-            "Importing the predefined usage amounts from ./data/usage-amounts.csv"
-        )
-        imports.csv.import_water_usages_from_file("./data/usage-amounts.csv", _session)
-        logging.info(
-            "Imported the predefined usage amounts from ./data/usage-amounts.csv"
-        )
     else:
         logging.info("Found an existing datasource which will be used")
     # Starting the uvicorn server
     uvicorn.run(
         **{
-            "app": "api:water_usage_forecasts_rest",
+            "app": "api:service",
             "host": "0.0.0.0",
             "port": _service_settings.http_port,
             "log_level": "warning",

@@ -65,8 +65,8 @@ def get_municipal(
         return municipal
     else:
         raise ValueError("The id_or_name parameter was neither a string nor a integer")
-    
-    
+
+
 def get_consumer_groups(session: sqlalchemy.orm.Session) -> list[tables.ConsumerGroup]:
     """
     Get a list consisting of all consumer groups listed in the database
@@ -75,6 +75,25 @@ def get_consumer_groups(session: sqlalchemy.orm.Session) -> list[tables.Consumer
     :return: A list containing all consumer groups
     :rtype: list[tables.ConsumerGroup]
     """
-    return (session
-            .query(tables.ConsumerGroup)
-            .all())
+    return session.query(tables.ConsumerGroup).all()
+
+
+def insert_object(obj, session):
+    """
+    Insert a new object into the database
+
+    :param obj: The object which shall be inserted
+    :type obj: bases ORMDeclarationBase
+    :param session: The database session used to insert the object
+    :type session: sqlalchemy.orm.Session
+    :return: The list of inserted municipals
+    :rtype: list
+    """
+    if not issubclass(type(obj), tables.ORMDeclarationBase):
+        raise ValueError(
+            "Only instances of ORM objects may be inserted into the database"
+        )
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj

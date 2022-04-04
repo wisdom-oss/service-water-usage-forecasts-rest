@@ -8,13 +8,12 @@ class APIException(Exception):
     pass
 
 
-class DuplicateEntryError(IntegrityError):
+class DuplicateEntryError(Exception):
     """
     A INSERT operation failed since a constraint (e.g. unique or primary key) was violated
     """
 
-    def __init__(self):
-        pass
+    pass
 
 
 class QueryDataError(APIException):

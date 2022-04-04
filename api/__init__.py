@@ -58,7 +58,7 @@ def _service_startup():
         eureka_server=f"http://{_registry_settings.host}:{_registry_settings.port}/",
         app_name=_service_settings.name,
         instance_port=_service_settings.http_port,
-        should_register=False,
+        should_register=True,
         should_discover=False,
         renewal_interval_in_secs=1,
         duration_in_secs=30,
@@ -67,7 +67,6 @@ def _service_startup():
     _amqp_client = amqp_rpc_client.Client(amqp_dsn=_amqp_settings.dsn, mute_pika=True)
     # Start the service registry client and register the service
     _registry_client.start()
-    _registry_client.register(py_eureka_client.eureka_client.INSTANCE_STATUS_STARTING)
     # Initialize the database table mappings
     database.tables.initialize_mappings()
     _logger.info(
