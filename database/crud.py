@@ -36,37 +36,6 @@ def get_consumer_group(
         raise ValueError("The id_or_name parameter was neither a string nor a integer")
 
 
-def get_municipal(
-    id_or_name: typing.Union[str, int], session: sqlalchemy.orm.Session
-) -> tables.Municipal:
-    """
-    Get the municipal matching the id or the name
-
-    :param id_or_name: The id or name of a municipal
-    :type id_or_name: typing.Union(str, int)
-    :param session: The database session used for pulling the data
-    :type session: sqlalchemy.orm.Session
-    :return: The municipal if it has been found, else None
-    :rtype: typing.Optional(tables.ConsumerGroup)
-    """
-    if type(id_or_name) is str:
-        municipal = (
-            session.query(tables.Municipal)
-            .filter(tables.Municipal.name == id_or_name)
-            .first()
-        )
-        return municipal
-    elif type(id_or_name) is int:
-        municipal = (
-            session.query(tables.Municipal)
-            .filter(tables.Municipal.id == id_or_name)
-            .first()
-        )
-        return municipal
-    else:
-        raise ValueError("The id_or_name parameter was neither a string nor a integer")
-
-
 def get_consumer_groups(session: sqlalchemy.orm.Session) -> list[tables.ConsumerGroup]:
     """
     Get a list consisting of all consumer groups listed in the database
