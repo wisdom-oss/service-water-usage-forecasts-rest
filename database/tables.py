@@ -2,6 +2,7 @@
 import sqlalchemy.orm
 from . import engine
 
+metadata = sqlalchemy.MetaData(schema="water_usage")
 ORMDeclarationBase = sqlalchemy.orm.declarative_base(name="ORMDeclarationBase")
 
 
@@ -10,22 +11,6 @@ def initialize_mappings():
     Initialize the object-relational mapping classes for this service
     """
     ORMDeclarationBase.metadata.create_all(bind=engine())
-
-
-class Municipal(ORMDeclarationBase):
-    """
-    A municipal in which a usage of water was documented
-    """
-
-    __tablename__ = "municipals"
-
-    id: int = sqlalchemy.Column(
-        sqlalchemy.Integer, primary_key=True, autoincrement=True
-    )
-    """The *internal* ID of the municipal"""
-
-    name: str = sqlalchemy.Column(sqlalchemy.String(length=255), unique=True)
-    """The name of the municipal"""
 
 
 class ConsumerGroup(ORMDeclarationBase):
@@ -58,11 +43,17 @@ class Usage(ORMDeclarationBase):
 
     municipal_id: int = sqlalchemy.Column(
         sqlalchemy.Integer,
-        sqlalchemy.ForeignKey("municipals.id", ondelete="SET NULL", onupdate="CASCADE"),
         name="municipal",
         nullable=True,
     )
     """The *internal* ID of the municipal in which the usage has been recorded"""
+
+    consumer_id: int = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        name="consumer",
+        nullable=True,
+    )
+    """The *internal* ID of the consumer for which the usage has been recorded"""
 
     consumer_group_id: int = sqlalchemy.Column(
         sqlalchemy.Integer,
