@@ -74,6 +74,7 @@ def _service_startup():
         "requests"
     )
     _registry_client.status_update(py_eureka_client.eureka_client.INSTANCE_STATUS_UP)
+    _logger.info('Waiting for new requests...')
 
 
 @service.on_event("shutdown")
