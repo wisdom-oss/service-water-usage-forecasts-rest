@@ -1,6 +1,6 @@
 SQLAlchemy==1.4.32
 SQLAlchemy-Utils==0.38.2
-pymysql==1.0.2
+psycopg2-binary==2.9.3
 pydantic[dotenv]==1.9.0
 fastapi~=0.75.1
 py-eureka-client==0.10.5

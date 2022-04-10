@@ -1,5 +1,6 @@
 """Module containing all settings which are used in the application"""
-from pydantic import BaseSettings, AmqpDsn, Field, stricturl, SecretStr
+import pydantic
+from pydantic import BaseSettings, AmqpDsn, Field, PostgresDsn
 
 
 class ServiceSettings(BaseSettings):
@@ -126,19 +127,17 @@ class AMQPSettings(BaseSettings):
 class DatabaseSettings(BaseSettings):
     """Settings related to the database connection"""
 
-    dsn: stricturl(
-        tld_required=False, allowed_schemes={"mariadb+pymysql", "mysql+pymysql"}
-    ) = Field(
+    dsn: pydantic.PostgresDsn = Field(
         default=...,
-        title="MariaDB Data Source Name",
+        title="PostgresSQL Data Source Name",
         description="A URI pointing to the MariaDB Database and instance containing the water "
         "usage amounts for this service",
         env="DATABASE_DSN",
     )
     """
-    MariaDB Data Source Name [REQUIRED]
+    PostgresSQL Data Source Name [REQUIRED]
     
-    An URI pointing to the MariaDB instance containing the database which contains the water
+    An URI pointing to the PostgresSQL instance containing the database which contains the water
     usage amounts and related values
     """
 
