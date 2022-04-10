@@ -38,10 +38,11 @@ def get_last_database_update(
     schema_name: str, engine: sqlalchemy.engine.Engine
 ) -> datetime.datetime:
     query = (
-        f"SELECT UPDATE_TIME "
-        f"FROM information_schema.TABLES "
-        f"WHERE TABLE_SCHEMA = \"{schema_name}\" "
-        f"ORDER BY UPDATE_TIME DESC LIMIT 1;"
+        f"SELECT timestamp "
+        f"FROM public.audit "
+        f"WHERE schema_name = {schema_name} "
+        f"ORDER BY timestamp DESC "
+        f"LIMIT 1"
     )
     result = engine.execute(query)
     for time in result:
