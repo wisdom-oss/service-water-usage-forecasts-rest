@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.10-slim
 # Set some labels
 LABEL de.uol.wisdom-oss.vendor="WISdoM 2.0 Project Group"
 LABEL de.uol.wisdom-oss.maintainer="wisdom@uol.de"
