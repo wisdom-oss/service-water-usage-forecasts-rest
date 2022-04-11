@@ -21,7 +21,7 @@ def get_consumer_group(
     if type(id_or_name) is str:
         consumer_group = (
             session.query(tables.ConsumerGroup)
-            .filter(tables.ConsumerGroup.name == id_or_name)
+            .filter(tables.ConsumerGroup.parameter == id_or_name)
             .first()
         )
         return consumer_group
