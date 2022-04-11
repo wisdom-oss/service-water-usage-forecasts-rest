@@ -23,6 +23,7 @@ import database
 import database.crud
 import database.tables
 import enums
+import exceptions
 import models.amqp
 import settings
 
@@ -314,9 +315,8 @@ async def forecast(
     calculation_requests = {}
     # Check if the spatial unit is for the municipalities or the districts
     if spatial_unit == enums.SpatialUnit.DISTRICTS:
-        # TODO: Access the geo data service and get the municipals within the district
-        #   Afterwards set a indicator to sum up the usage values
-        pass
+        districts = [m.name for m in database.crud.get_municipals_in_districts(districts, session)]
+        logging.debug('Found the following municipals: %s', districts)
     for district in districts:
         if database.crud.get_municipal(district, session) is None:
             # Since the municipal is not in the database add this as a hint to the responses
