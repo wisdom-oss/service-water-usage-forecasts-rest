@@ -6,26 +6,26 @@ import sqlalchemy.sql.functions
 
 import database.crud
 import database.tables
+import exceptions
 import models.amqp
 
 
 def get_water_usage_data(municipal_id, consumer_group_id, session):
     """Get the water usages per year for the supplied municipal and consumer group"""
-    usages = (
-        session.query(
-            database.tables.Usage.year,
-            sqlalchemy.sql.functions.sum(database.tables.Usage.value),
-        )
-        .filter(database.tables.Usage.municipal_id == municipal_id)
-        .filter(database.tables.Usage.consumer_group_id == consumer_group_id)
-        .group_by(database.tables.Usage.year)
-        .all()
-    )
+    query = f"SELECT year, sum(value) " \
+            f"FROM water_usage.usages " \
+            f"WHERE municipal = {municipal_id} " \
+            f"AND consumer_group = {consumer_group_id} " \
+            f"GROUP BY year " \
+            f"ORDER BY year"
+    usages = database.engine().execute(query).all()
     usage_values = []
     for data in usages:
-        usage_values.append(data[1])
+        usage_values.append(float(data[1]))
+    if len(usage_values) < 3:
+        raise exceptions.InsufficientDataError(consumer_group_id, municipal_id)
     return models.amqp.WaterUsages(
-        start=usages[0][0], end=usages[-1][0], usages=usage_values
+        start=int(usages[0][0]), end=int(usages[-1][0]), usages=usage_values
     )
 
 
