@@ -3,7 +3,6 @@ import asyncio
 import logging
 import sys
 
-import pymysql.err
 import sqlalchemy_utils as db_utils
 import uvicorn as uvicorn
 from pydantic import ValidationError
@@ -125,7 +124,7 @@ if __name__ == "__main__":
         )
         try:
             db_utils.create_database(_database_settings.dsn)
-        except pymysql.err.ProgrammingError as db_error:
+        except Exception as db_error:
             logging.critical(
                 "Failed to create the database due to the following error: %s", db_error
             )
