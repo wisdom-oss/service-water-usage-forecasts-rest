@@ -323,7 +323,7 @@ async def forecast(
             forecast_results.append(
                 {
                     "name": district,
-                    "error": "This district is not the database. Please check your query",
+                    "error": "no_such_municipal",
                 }
             )
         else:
@@ -331,7 +331,7 @@ async def forecast(
             # database
             if consumer_groups is None:
                 consumer_groups = [
-                    c.name for c in database.crud.get_consumer_groups(session)
+                    c.parameter for c in database.crud.get_consumer_groups(session)
                 ]
             for consumer_group in consumer_groups:
                 if database.crud.get_consumer_group(consumer_group, session) is None:
@@ -339,7 +339,7 @@ async def forecast(
                         {
                             "name": district,
                             "consumerGroup": consumer_group,
-                            "error": "The supplied consumer group is not configured",
+                            "error": "missing_consumer_group",
                         }
                     )
                 else:
@@ -349,9 +349,20 @@ async def forecast(
                         consumer_group, session
                     ).id
                     municipal_id = database.crud.get_municipal(district, session).id
-                    usage_data = functions.get_water_usage_data(
-                        municipal_id, consumer_group_id, session
-                    )
+                    try:
+                        usage_data = functions.get_water_usage_data(
+                            municipal_id, consumer_group_id, session
+                        )
+
+                    except exceptions.InsufficientDataError:
+                        forecast_results.append(
+                            {
+                                "name": district,
+                                "consumerGroup": consumer_group,
+                                "error": "insufficient_data",
+                            }
+                        )
+                        continue
                     # Now generate a new request
                     forecast_request = models.amqp.ForecastRequest(
                         usage_data=usage_data, type=forecast_model
@@ -366,6 +377,7 @@ async def forecast(
                         "municipal": district,
                     }
                     calculation_requests.update({forecast_request_id: forecast_data})
+                    _logger.info('[-->] Published Forecast Request:\n%s\n%s', forecast_request_id, forecast_data)
                     # Now check if any response has already been sent
                     for request_id, request_data in dict(calculation_requests).items():
                         byte_response = _amqp_client.get_response(request_id)
@@ -385,6 +397,7 @@ async def forecast(
         for request_id, request_data in dict(calculation_requests).items():
             byte_response = _amqp_client.await_response(request_id, timeout=5.0)
             if byte_response is not None:
+                _logger.warning('Exceeded maximum waiting time for response to the following request: \n%s\n%s, ', request_id, request_data)
                 response: dict = json.loads(byte_response)
                 # Now add the name and the consumer group to the response
                 response.update(
