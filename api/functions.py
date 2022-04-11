@@ -1,17 +1,12 @@
 import datetime
 import logging
 
-import amqp_rpc_client
+import pytz.reference
 import sqlalchemy.sql.functions
 
 import database.crud
 import database.tables
 import models.amqp
-
-
-def get_municipals_in_district(district: str, client: amqp_rpc_client.Client):
-    # TODO: Implement call to Geo Data Service to get the requested data
-    pass
 
 
 def get_water_usage_data(municipal_id, consumer_group_id, session):
