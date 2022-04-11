@@ -1,5 +1,6 @@
 """Module containing all settings which are used in the application"""
-from pydantic import BaseSettings, AmqpDsn, Field, stricturl, SecretStr
+import pydantic
+from pydantic import BaseSettings, AmqpDsn, Field, PostgresDsn
 
 
 class ServiceSettings(BaseSettings):
@@ -49,7 +50,7 @@ class ServiceSettings(BaseSettings):
     class Config:
         """Configuration of the service settings"""
 
-        env_file = ".application.env"
+        env_file = "env/application.env"
         """Allow loading the values for the service settings from the specified file"""
 
 
@@ -84,7 +85,7 @@ class ServiceRegistrySettings(BaseSettings):
     class Config:
         """Configuration of the service registry settings"""
 
-        env_file = ".registry.env"
+        env_file = "env/registry.env"
         """The location of the environment file from which these values may be loaded"""
 
 
@@ -119,33 +120,31 @@ class AMQPSettings(BaseSettings):
     class Config:
         """Configuration of the AMQP connection settings"""
 
-        env_file = ".amqp.env"
+        env_file = "env/amqp.env"
         """The location of the environment file from which the settings may be read"""
 
 
 class DatabaseSettings(BaseSettings):
     """Settings related to the database connection"""
 
-    dsn: stricturl(
-        tld_required=False, allowed_schemes={"mariadb+pymysql", "mysql+pymysql"}
-    ) = Field(
+    dsn: pydantic.PostgresDsn = Field(
         default=...,
-        title="MariaDB Data Source Name",
+        title="PostgresSQL Data Source Name",
         description="A URI pointing to the MariaDB Database and instance containing the water "
         "usage amounts for this service",
         env="DATABASE_DSN",
     )
     """
-    MariaDB Data Source Name [REQUIRED]
+    PostgresSQL Data Source Name [REQUIRED]
     
-    An URI pointing to the MariaDB instance containing the database which contains the water
+    An URI pointing to the PostgresSQL instance containing the database which contains the water
     usage amounts and related values
     """
 
     class Config:
         """Configuration of the AMQP related settings"""
 
-        env_file = ".database.env"
+        env_file = "env/database.env"
         """The file from which the settings may be read"""
 
 
@@ -164,4 +163,4 @@ class SecuritySettings(BaseSettings):
     """
 
     class Config:
-        env_file = ".security.env"
+        env_file = "env/security.env"
