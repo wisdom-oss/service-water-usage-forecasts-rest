@@ -119,8 +119,6 @@ async def _caching_check(request: starlette.requests.Request, call_next):
     last_database_update = functions.get_last_database_update(
         "water_usage", database.engine()
     )
-    # Make the database update time timezone aware
-    last_database_update = pytz.UTC.localize(last_database_update)
     # Now get the value of the "If-None-Match" and "If-Modified-Since" headers
     e_tag = request.headers.get("If-None-Match")
     data_last_modification = request.headers.get("If-Modified-Since")
