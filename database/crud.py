@@ -95,3 +95,17 @@ def insert_object(obj, session: sqlalchemy.orm.Session):
     session.commit()
     session.refresh(obj)
     return obj
+
+
+def get_municipals_in_districts(district_list, session: sqlalchemy.orm.Session) -> list[tables.Municipal]:
+    municipals = []
+    for district_name in district_list:
+        district = (
+            session
+            .query(tables.District)
+            .filter(tables.District.name == district_name)
+            .first()
+        )
+        for municipal in district.municipals:
+            municipals.append(municipal)
+    return municipals
