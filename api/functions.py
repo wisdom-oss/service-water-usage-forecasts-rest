@@ -10,7 +10,7 @@ import exceptions
 import models.amqp
 
 
-def get_water_usage_data(municipal_id, consumer_group_id, session):
+def get_water_usage_data(municipal_id, consumer_group_id):
     """Get the water usages per year for the supplied municipal and consumer group"""
     query = f"SELECT year, sum(value) " \
             f"FROM water_usage.usages " \

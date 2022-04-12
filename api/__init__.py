@@ -349,7 +349,7 @@ async def forecast(
                     municipal_id = database.crud.get_municipal(district, session).id
                     try:
                         usage_data = functions.get_water_usage_data(
-                            municipal_id, consumer_group_id, session
+                            municipal_id, consumer_group_id
                         )
 
                     except exceptions.InsufficientDataError:
@@ -375,11 +375,12 @@ async def forecast(
                         "municipal": district,
                     }
                     calculation_requests.update({forecast_request_id: forecast_data})
-                    _logger.info('[-->] Published Forecast Request:\n%s\n%s', forecast_request_id, forecast_data)
+                    _logger.info('[%s ->] Published Forecast Request: %s', forecast_request_id, forecast_data)
                     # Now check if any response has already been sent
                     for request_id, request_data in dict(calculation_requests).items():
                         byte_response = _amqp_client.get_response(request_id)
                         if byte_response is not None:
+                            _logger.info('[<- %s] Received Forecasted Data: %s', forecast_request_id, forecast_data)
                             response: dict = json.loads(byte_response)
                             # Now add the name and the consumer group to the response
                             response.update(
@@ -395,7 +396,6 @@ async def forecast(
         for request_id, request_data in dict(calculation_requests).items():
             byte_response = _amqp_client.await_response(request_id, timeout=5.0)
             if byte_response is not None:
-                _logger.warning('Exceeded maximum waiting time for response to the following request: \n%s\n%s, ', request_id, request_data)
                 response: dict = json.loads(byte_response)
                 # Now add the name and the consumer group to the response
                 response.update(
@@ -408,6 +408,7 @@ async def forecast(
                 forecast_results.append(response)
                 calculation_requests.pop(request_id)
             else:
+                _logger.warning('Exceeded maximum waiting time for response to the following request: %s', request_id)
                 forecast_results.append(
                     {
                         "name": request_data["municipal"],
