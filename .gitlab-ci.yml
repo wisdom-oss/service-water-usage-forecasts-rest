@@ -9,3 +9,6 @@ include:
 stages:
   - update
   - docs
+
+variables:
+  COMPOSE_SERVICE_NAME: "service-water-usage-forecasts-rest"
