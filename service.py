@@ -3,7 +3,6 @@ import asyncio
 import logging
 import sys
 
-import pymysql.err
 import sqlalchemy_utils as db_utils
 import uvicorn as uvicorn
 from pydantic import ValidationError
@@ -72,11 +71,9 @@ if __name__ == "__main__":
         "Successfully read the settings for the security measures: %s",
         _security_settings,
     )
-    # == Connectivity Checks ==
-    _event_loop = asyncio.get_event_loop()
     # = Service Registry Connection =
     logging.info("Checking the connection to the service registry")
-    _registry_available = _event_loop.run_until_complete(
+    _registry_available = asyncio.run(
         tools.is_host_available(
             host=_registry_settings.host, port=_registry_settings.port
         )
@@ -89,7 +86,7 @@ if __name__ == "__main__":
         sys.exit(2)
     # = AMQP Message Broker =
     logging.info("Checking the connection to the message broker")
-    _message_broker_available = _event_loop.run_until_complete(
+    _message_broker_available = asyncio.run(
         tools.is_host_available(
             host=_amqp_settings.dsn.host,
             port=int(_amqp_settings.dsn.port)
@@ -105,7 +102,7 @@ if __name__ == "__main__":
         sys.exit(2)
     # = Database connection =
     logging.info("Checking the connection to the database server")
-    _database_available = _event_loop.run_until_complete(
+    _database_available = asyncio.run(
         tools.is_host_available(
             host=_database_settings.dsn.host,
             port=3306
@@ -127,18 +124,19 @@ if __name__ == "__main__":
         )
         try:
             db_utils.create_database(_database_settings.dsn)
-        except pymysql.err.ProgrammingError as db_error:
+        except Exception as db_error:
             logging.critical(
                 "Failed to create the database due to the following error: %s", db_error
             )
             sys.exit(3)
         # Create the table metadata
         logging.info("Created the specified datasource")
-        database.tables.TableBase.metadata.create_all(
+        database.tables.ORMDeclarationBase.metadata.create_all(
             bind=database.engine(), checkfirst=True
         )
+        # TODO: Import example data
         # Create a new database session
-        _session = next(database.get_database_session())
+        _session = next(database.session())
         # Insert the example values into the database
     else:
         logging.info("Found an existing datasource which will be used")

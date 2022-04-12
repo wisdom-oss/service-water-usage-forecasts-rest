@@ -21,7 +21,7 @@ def get_consumer_group(
     if type(id_or_name) is str:
         consumer_group = (
             session.query(tables.ConsumerGroup)
-            .filter(tables.ConsumerGroup.name == id_or_name)
+            .filter(tables.ConsumerGroup.parameter == id_or_name)
             .first()
         )
         return consumer_group
@@ -36,18 +36,27 @@ def get_consumer_group(
         raise ValueError("The id_or_name parameter was neither a string nor a integer")
 
 
-def get_municipal(
-    id_or_name: typing.Union[str, int], session: sqlalchemy.orm.Session
-) -> tables.Municipal:
+def get_consumer_groups(session: sqlalchemy.orm.Session) -> list[tables.ConsumerGroup]:
+    """
+    Get a list consisting of all consumer groups listed in the database
+    :param session: The database session used to pull the data from the database
+    :type session: sqlalchemy.orm.Session
+    :return: A list containing all consumer groups
+    :rtype: list[tables.ConsumerGroup]
+    """
+    return session.query(tables.ConsumerGroup).all()
+
+
+def get_municipal(id_or_name: typing.Union[str, int], session: sqlalchemy.orm.Session) -> tables.Municipal:
     """
     Get the municipal matching the id or the name
 
-    :param id_or_name: The id or name of a municipal
-    :type id_or_name: typing.Union(str, int)
+    :param id_or_name: The id or name of a consumer group
+    :type id_or_name: str | int
     :param session: The database session used for pulling the data
     :type session: sqlalchemy.orm.Session
-    :return: The municipal if it has been found, else None
-    :rtype: typing.Optional(tables.ConsumerGroup)
+    :return: The municipal if it has been found else None
+    :rtype: tables.Municipal
     """
     if type(id_or_name) is str:
         municipal = (
@@ -67,18 +76,7 @@ def get_municipal(
         raise ValueError("The id_or_name parameter was neither a string nor a integer")
 
 
-def get_consumer_groups(session: sqlalchemy.orm.Session) -> list[tables.ConsumerGroup]:
-    """
-    Get a list consisting of all consumer groups listed in the database
-    :param session: The database session used to pull the data from the database
-    :type session: sqlalchemy.orm.Session
-    :return: A list containing all consumer groups
-    :rtype: list[tables.ConsumerGroup]
-    """
-    return session.query(tables.ConsumerGroup).all()
-
-
-def insert_object(obj, session):
+def insert_object(obj, session: sqlalchemy.orm.Session):
     """
     Insert a new object into the database
 
@@ -97,3 +95,17 @@ def insert_object(obj, session):
     session.commit()
     session.refresh(obj)
     return obj
+
+
+def get_municipals_in_districts(district_list, session: sqlalchemy.orm.Session) -> list[tables.Municipal]:
+    municipals = []
+    for district_name in district_list:
+        district = (
+            session
+            .query(tables.District)
+            .filter(tables.District.name == district_name)
+            .first()
+        )
+        for municipal in district.municipals:
+            municipals.append(municipal)
+    return municipals

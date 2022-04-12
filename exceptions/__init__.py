@@ -1,5 +1,4 @@
 """Module for custom Exceptions for generating error messages"""
-from sqlalchemy.exc import IntegrityError
 
 
 class APIException(Exception):
@@ -27,3 +26,18 @@ class QueryDataError(APIException):
         """
         self.short_error = short_error
         self.error_description = error_description
+
+
+class InsufficientDataError(APIException):
+
+    def __init__(self, consumer_group_id: int, municipality_id: int):
+        """
+        New Insufficient data error
+
+        :param consumer_group_id: The consumer group id for which is no sufficient data present
+        :type consumer_group_id: int
+        :param municipality_id: The municipality in which the data is missing
+        :type municipality_id: int
+        """
+        self.consumer_group_id = consumer_group_id
+        self.municipality_id = municipality_id
