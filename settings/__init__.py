@@ -1,6 +1,6 @@
 """Module containing all settings which are used in the application"""
 import pydantic
-from pydantic import BaseSettings, AmqpDsn, Field, PostgresDsn
+from pydantic import BaseSettings, AmqpDsn, Field
 
 
 class ServiceSettings(BaseSettings):
