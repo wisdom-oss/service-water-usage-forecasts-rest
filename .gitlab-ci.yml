@@ -1,0 +1,11 @@
+include:
+  - project: 'wisdom-oss/ci-cd'
+    ref: main
+    file: '/documentation.yml'
+  - project: 'wisdom-oss/ci-cd'
+    ref: main
+    file: '/service-update.yml'
+
+stages:
+  - update
+  - docs
