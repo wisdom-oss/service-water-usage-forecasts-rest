@@ -10,21 +10,9 @@
     },
     {
       "items": [
-        {
-          "items": [
-            {
-              "items": [
-                "database/tables/operations/__init__"
-              ],
-              "label": "database.tables.operations",
-              "type": "category"
-            },
-            "database/tables/__init__"
-          ],
-          "label": "database.tables",
-          "type": "category"
-        },
-        "database/__init__"
+        "database/__init__",
+        "database/crud",
+        "database/tables"
       ],
       "label": "database",
       "type": "category"
@@ -52,17 +40,16 @@
     },
     {
       "items": [
-        "messaging/__init__"
-      ],
-      "label": "messaging",
-      "type": "category"
-    },
-    {
-      "items": [
         {
           "items": [
-            "models/requests/__init__",
-            "models/requests/enums"
+            "models/amqp/__init__"
+          ],
+          "label": "models.amqp",
+          "type": "category"
+        },
+        {
+          "items": [
+            "models/requests/__init__"
           ],
           "label": "models.requests",
           "type": "category"
@@ -79,6 +66,21 @@
       "label": "models",
       "type": "category"
     },
+    {
+      "items": [
+        "settings/__init__"
+      ],
+      "label": "settings",
+      "type": "category"
+    },
+    {
+      "items": [
+        "tools/__init__"
+      ],
+      "label": "tools",
+      "type": "category"
+    },
+    "enums",
     "service"
   ],
   "label": "Reference",

@@ -3,131 +3,72 @@ sidebar_label: api
 title: api
 ---
 
-Module in which the server is described and all ops of the server are commenced in
-
-
-#### water\_usage\_forecasts\_rest
-
-Fast API Application for this service
-
-
-#### startup
+#### \_service\_startup
 
 ```python
-@water_usage_forecasts_rest.on_event('startup')
-async def startup()
+@service.on_event("startup")
+def _service_startup()
 ```
 
-Startup Event Handler
-
-This event handler will automatically register this service at the service registry,
-create the necessary databases and tables and will start a rpc client which will send
-messages to the forecasting module
+Handler for the service startup
 
 
-#### shutdown
+#### \_service\_shutdown
 
 ```python
-@water_usage_forecasts_rest.on_event('shutdown')
-async def shutdown()
+@service.on_event("shutdown")
+def _service_shutdown()
 ```
 
-Shutdown event handler
-
-This event handler will deregister the service from the service registry
+Handle the service shutdown
 
 
-#### request\_validation\_error\_handler
+#### \_token\_check
 
 ```python
-@water_usage_forecasts_rest.exception_handler(RequestValidationError)
-async def request_validation_error_handler(__request: Request, exc: RequestValidationError)
+@service.middleware("http")
+async def _token_check(request: starlette.requests.Request, call_next)
 ```
 
-Error handler for request validation errors
+Intercept every request made to this service and check if the request contains a Bearer token
 
-These errors will occur if the request data is not valid. This error handler just changes the
-status from 422 (Unprocessable Entity) to 400 (Bad Request)
-
-
-#### query\_data\_error\_handler
-
-```python
-@water_usage_forecasts_rest.exception_handler(QueryDataError)
-async def query_data_error_handler(_request: Request, exc: QueryDataError)
-```
-
-Error handler for querying data which is not available
-
-This error handler will return a status code 400 (Bad Request) alongside with some
-information on the reason for the error
-
-
-#### query\_data\_error\_handler
-
-```python
-@water_usage_forecasts_rest.exception_handler(exceptions.DuplicateEntryError)
-async def query_data_error_handler(_request: Request, exc: exceptions.DuplicateEntryError)
-```
-
-Error handler for querying data which is not available
-
-This error handler will return a status code 400 (Bad Request) alongside with some
-information on the reason for the error
-
-
-#### run\_prognosis
-
-```python
-@water_usage_forecasts_rest.get(path='/{spatial_unit}/{district}/{forecast_type}')
-async def run_prognosis(spatial_unit: SpatialUnit, district: str, forecast_type: ForecastType, consumer_group: ConsumerGroup = Query(ConsumerGroup.ALL, alias='consumerGroup'), db_connection: Session = Depends(database.get_database_session))
-```
-
-Run a new prognosis
+and check if the bearer token has the correct scope for this service
 
 **Arguments**:
 
-- `spatial_unit` (`SpatialUnit`): Selected spatial unit
-- `district` (`str`): The district in the selected spatial unit
-- `forecast_type` (`ForecastType`): The model which shall be used during broadcasting
-- `consumer_group` (`ConsumerGroup`): The consumer group whose water usages shall be predicted, defaults to all
-- `db_connection` (`Session`): Connection to the database used to do some queries
-
-#### put\_new\_datafile
-
-```python
-import enums
-
-
-@water_usage_forecasts_rest.put(
-    path='/import/{datatype}',
-    status_code=201
-)
-async def put_new_datafile(datatype: enums.ImportDataTypes, data: UploadFile = File(...),
-                           db_connection: Session = Depends(database.get_database_session))
-```
-
-Import a new set of data into the database
-
-**Arguments**:
-
-- `db_connection`: 
-- `datatype`: The type of data which shall be imported
-- `data`: The file which shall be imported
+- `request` (`starlette.requests.Request`): The incoming request
+- `call_next` (`callable`): The next action which shall be called to generate the response
 
 **Returns**:
 
-If the request was a success it will send a 201 code back
+`starlette.responses.Response`: The response which has been generated
 
-#### get\_available\_parameters
+#### forecast
 
 ```python
-@water_usage_forecasts_rest.get('/')
-async def get_available_parameters(db: Session = Depends(database.get_database_session))
+@service.get(path="/{spatial_unit}/{forecast_model}")
+async def forecast(
+    spatial_unit: enums.SpatialUnit,
+    forecast_model: enums.ForecastModel,
+    districts: list[str] = fastapi.Query(default=..., alias="district"),
+    consumer_groups: list[str] = fastapi.Query(default=None,
+                                               alias="consumerGroup"),
+    session: sqlalchemy.orm.Session = fastapi.Depends(database.session))
 ```
 
-Get all possible parameters
+Execute a new forecast
 
 **Arguments**:
 
-- `db`: 
+- `spatial_unit` (`enums.SpatialUnit`): The spatial unit used for the request
+- `forecast_model` (`enums.ForecastModel`): The forecast model which shall be used
+- `districts` (`list[str]`): The districts that shall be used for the forecasts
+- `consumer_groups` (`list[str], optional`): Consumer Groups which shall be included in the forecasts. If no
+consumer group was transmitted the forecast will be executed for all consumer groups and
+values with no consumer groups
+- `session` (`sqlalchemy.orm.Session`): The session used to access the database
+
+**Returns**:
+
+`list[dict]`: A list with the results of the forecast
+

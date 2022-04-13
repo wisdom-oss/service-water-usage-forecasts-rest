@@ -3,27 +3,27 @@ sidebar_label: database
 title: database
 ---
 
-Module for organizing the database connections and operations
-
-
-#### get\_database\_session
+#### session
 
 ```python
-def get_database_session() -> DatabaseSession
+def session() -> sqlalchemy.orm.Session
 ```
 
-Get an opened Database session which can be used to query data
+Get an opened session to the database
 
 **Returns**:
 
-`DatabaseSession`: Database Session
+`sqlalchemy.orm.Session`: The opened database session
 
-#### initialise\_orm\_models
+#### engine
 
 ```python
-def initialise_orm_models()
+def engine() -> sqlalchemy.engine.Engine
 ```
 
-Initialize the ORM models and create the necessary metadata
+Get the database engine
 
+**Returns**:
+
+`sqlalchemy.engine.Engine`: The database engine used to connect to the database
 

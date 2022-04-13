@@ -39,12 +39,3 @@ and the supplied usage amounts
 
 - `values`: 
 
-## ForecastRequest Objects
-
-```python
-class ForecastRequest(RealData)
-```
-
-Model for describing the incoming forecast request, which will be used to build the amqp message
-
-
