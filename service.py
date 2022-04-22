@@ -17,7 +17,7 @@ if __name__ == "__main__":
     # Configure the logging module
     logging.basicConfig(
         format="%(levelname)-8s | %(asctime)s | %(name)-25s | %(message)s",
-        level=tools.resolve_log_level(_service_settings.log_level),
+        level=tools.resolve_log_level(_service_settings.logging_level),
     )
     # Log a startup message
     logging.info("Starting the %s service", _service_settings.name)
@@ -131,13 +131,7 @@ if __name__ == "__main__":
             sys.exit(3)
         # Create the table metadata
         logging.info("Created the specified datasource")
-        database.tables.ORMDeclarationBase.metadata.create_all(
-            bind=database.engine(), checkfirst=True
-        )
-        # TODO: Import example data
-        # Create a new database session
-        _session = next(database.session())
-        # Insert the example values into the database
+        database.tables.initialize_tables()
     else:
         logging.info("Found an existing datasource which will be used")
     # Starting the uvicorn server

@@ -4,7 +4,6 @@ import logging
 import pytz.reference
 import sqlalchemy.sql.functions
 
-import database.crud
 import database.tables
 import exceptions
 import models.amqp
