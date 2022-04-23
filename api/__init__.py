@@ -20,7 +20,6 @@ import starlette.responses
 
 import api.functions
 import database
-import database.crud
 import database.tables
 import enums
 import exceptions
@@ -69,7 +68,7 @@ def _service_startup():
     # Start the service registry client and register the service
     _registry_client.start()
     # Initialize the database table mappings
-    database.tables.initialize_mappings()
+    database.tables.initialize_tables()
     _logger.info(
         "Pre-Startup tasks finished. Settings instance status to active and allowing "
         "requests"
@@ -117,7 +116,7 @@ async def _caching_check(request: starlette.requests.Request, call_next):
     ).hexdigest()
     # Now get the time of the last update to any of the tables in the system
     last_database_update = functions.get_last_database_update(
-        "water_usage", database.engine()
+        "water_usage", database.engine
     )
     # Now get the value of the "If-None-Match" and "If-Modified-Since" headers
     e_tag = request.headers.get("If-None-Match")
@@ -285,7 +284,6 @@ async def forecast(
     forecast_model: enums.ForecastModel,
     districts: list[str] = fastapi.Query(default=..., alias="district"),
     consumer_groups: list[str] = fastapi.Query(default=None, alias="consumerGroup"),
-    session: sqlalchemy.orm.Session = fastapi.Depends(database.session),
 ):
     """
     Execute a new forecast
@@ -307,117 +305,23 @@ async def forecast(
     """
     # Save the current time to add it to the response headers
     forecast_start = time.time()
-    # Create an empty list containing the forecast results
-    forecast_results = []
-    # Create a dictionary for collecting all sent forecast calculation requests
-    calculation_requests = {}
     # Check if the spatial unit is for the municipalities or the districts
-    if spatial_unit == enums.SpatialUnit.DISTRICTS:
-        districts = [m.name for m in database.crud.get_municipals_in_districts(districts, session)]
-        logging.debug('Found the following municipals: %s', districts)
-    for district in districts:
-        if database.crud.get_municipal(district, session) is None:
-            # Since the municipal is not in the database add this as a hint to the responses
-            forecast_results.append(
-                {
-                    "name": district,
-                    "error": "no_such_municipal",
-                }
-            )
-        else:
-            # Now iterate through the consumer groups that were sent and filter those not in the
-            # database
-            if consumer_groups is None:
-                consumer_groups = [
-                    c.parameter for c in database.crud.get_consumer_groups(session)
-                ]
-            for consumer_group in consumer_groups:
-                if database.crud.get_consumer_group(consumer_group, session) is None:
-                    forecast_results.append(
-                        {
-                            "name": district,
-                            "consumerGroup": consumer_group,
-                            "error": "missing_consumer_group",
-                        }
-                    )
-                else:
-                    # Since the district and consumer group is in the database get the water
-                    # usages for the consumer group
-                    consumer_group_id = database.crud.get_consumer_group(
-                        consumer_group, session
-                    ).id
-                    municipal_id = database.crud.get_municipal(district, session).id
-                    try:
-                        usage_data = functions.get_water_usage_data(
-                            municipal_id, consumer_group_id
-                        )
-
-                    except exceptions.InsufficientDataError:
-                        forecast_results.append(
-                            {
-                                "name": district,
-                                "consumerGroup": consumer_group,
-                                "error": "insufficient_data",
-                            }
-                        )
-                        continue
-                    # Now generate a new request
-                    forecast_request = models.amqp.ForecastRequest(
-                        usage_data=usage_data, type=forecast_model
-                    )
-                    # Now publish the forecast request
-                    forecast_request_id = _amqp_client.send(
-                        forecast_request.json(), _amqp_settings.exchange
-                    )
-                    # Store the forecast request id and the consumer group and district
-                    forecast_data = {
-                        "consumer_group": consumer_group,
-                        "municipal": district,
-                    }
-                    calculation_requests.update({forecast_request_id: forecast_data})
-                    _logger.info('[%s ->] Published Forecast Request: %s', forecast_request_id, forecast_data)
-                    # Now check if any response has already been sent
-                    for request_id, request_data in dict(calculation_requests).items():
-                        byte_response = _amqp_client.get_response(request_id)
-                        if byte_response is not None:
-                            _logger.info('[<- %s] Received Forecasted Data: %s', forecast_request_id, forecast_data)
-                            response: dict = json.loads(byte_response)
-                            # Now add the name and the consumer group to the response
-                            response.update(
-                                {
-                                    "name": request_data["municipal"],
-                                    "consumerGroup": request_data["consumer_group"],
-                                }
-                            )
-                            # Now add the response to the list of responses
-                            forecast_results.append(response)
-                            calculation_requests.pop(request_id)
-    while len(calculation_requests) > 0:
-        for request_id, request_data in dict(calculation_requests).items():
-            byte_response = _amqp_client.await_response(request_id, timeout=5.0)
-            if byte_response is not None:
-                response: dict = json.loads(byte_response)
-                # Now add the name and the consumer group to the response
-                response.update(
-                    {
-                        "name": request_data["municipal"],
-                        "consumerGroup": request_data["consumer_group"],
-                    }
-                )
-                # Now add the response to the list of responses
-                forecast_results.append(response)
-                calculation_requests.pop(request_id)
-            else:
-                _logger.warning('Exceeded maximum waiting time for response to the following request: %s', request_id)
-                forecast_results.append(
-                    {
-                        "name": request_data["municipal"],
-                        "consumerGroup": request_data["consumer_group"],
-                        "error": "calculation_module_timeout",
-                    }
-                )
+    forecast_query = models.amqp.ForecastQuery(
+        granularity=spatial_unit,
+        model=forecast_model,
+        objects=districts,
+        consumer_groups=consumer_groups
+    )
+    _query_id = _amqp_client.send(forecast_query.json(by_alias=True), _amqp_settings.exchange)
+    query_wait_time_start = time.time()
+    _query_response = _amqp_client.await_response(_query_id, timeout=120)
+    query_wait_time_stop = time.time()
+    if _query_response is None:
+        return starlette.responses.Response(
+            status_code=412
+        )
     return starlette.responses.JSONResponse(
         status_code=200,
-        headers={"X-Forecast-Duration": str(time.time() - forecast_start)},
-        content=forecast_results,
+        headers={"X-Forecast-Duration": str(time.time() - forecast_start), "X-AMQP-WaitTime": str(query_wait_time_stop - query_wait_time_start)},
+        content=json.loads(_query_response),
     )
