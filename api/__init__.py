@@ -15,6 +15,7 @@ import amqp_rpc_client
 import fastapi.middleware.gzip
 import fastapi.exceptions
 import py_eureka_client.eureka_client
+import pydantic
 import pytz
 import sqlalchemy.orm
 import sqlalchemy_utils as db_utils
@@ -400,12 +401,16 @@ async def forecast(
     # Save the current time to add it to the response headers
     forecast_start = time.time()
     # Check if the spatial unit is for the municipalities or the districts
-    forecast_query = models.amqp.ForecastQuery(
-        granularity=spatial_unit,
-        model=forecast_model,
-        objects=districts,
-        consumer_groups=consumer_groups,
-    )
+    try:
+        forecast_query = models.amqp.ForecastQuery(
+            granularity=spatial_unit,
+            model=forecast_model,
+            objects=districts,
+            consumer_groups=consumer_groups,
+        )
+    except pydantic.ValidationError as e:
+        print(e.json())
+        return e.json()
     _query_id = _amqp_client.send(
         forecast_query.json(by_alias=True), _amqp_settings.exchange
     )
