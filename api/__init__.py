@@ -78,20 +78,6 @@ async def _service_startup():
     logging.debug(
         "Successfully read the settings for the AMQP connection: %s", _amqp_settings
     )
-    logging.debug("Reading the settings for the service registry connection")
-    try:
-        _registry_settings = settings.ServiceRegistrySettings()
-    except ValidationError:
-        logging.critical(
-            "Unable to read the service registry related settings. Please refer to "
-            "the documentation for further instructions: "
-            "SERVICE_REGISTRY_SETTINGS_INVALID"
-        )
-        sys.exit(1)
-    logging.debug(
-        "Successfully read the settings for the service registry connection: %s",
-        _registry_settings,
-    )
     logging.debug("Reading the settings for the database connection")
     try:
         _database_settings = settings.DatabaseSettings()
@@ -117,16 +103,7 @@ async def _service_startup():
         _security_settings,
     )
     # = Service Registry Connection =
-    logging.info("Checking the connection to the service registry")
-    _registry_available = await tools.is_host_available(
-        host=_registry_settings.host, port=_registry_settings.port, timeout=60
-    )
-    if not _registry_available:
-        logging.critical(
-            "The service registry is not reachable. Therefore, this service is unable to register "
-            "itself at the service registry and it is not callable"
-        )
-        sys.exit(2)
+
     # = AMQP Message Broker =
     logging.info("Checking the connection to the message broker")
     _message_broker_available = await tools.is_host_available(
@@ -199,13 +176,6 @@ async def _service_startup():
     )
     _registry_client.status_update(py_eureka_client.eureka_client.INSTANCE_STATUS_UP)
     _logger.info("Waiting for new requests...")
-
-
-@service.on_event("shutdown")
-def _service_shutdown():
-    """Handle the service shutdown"""
-    # Inform the service registry that the service is going offline and stop the eureka client
-    _registry_client.stop()
 
 
 # ===== Middlewares ======
