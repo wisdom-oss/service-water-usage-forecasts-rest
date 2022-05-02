@@ -115,31 +115,41 @@ class ForecastQuery(BaseModel):
 
     @pydantic.validator("objects")
     def check_object_existence(cls, v, values):
+        v = sorted(v)
         granularity = values.get("granularity")
-        if granularity == enums.SpatialUnit.MUNICIPALITIES:
+        if granularity == enums.SpatialUnit.DISTRICTS:
             district_query = sql.select(
-                [database.tables.districts.c.name], database.tables.districts.c.name.in_(v)
+                [database.tables.districts.c.name],
+                database.tables.districts.c.name.in_(v),
             )
             results = database.engine.execute(district_query).all()
-            found_objects = [row[0] for row in results]
-            for obj in v:
-                if obj not in found_objects:
-                    raise ValueError(f"The district {obj} was not found in the database")
+            found_objects = sorted([row[0] for row in results])
+            if v != found_objects:
+                not_available_items = [i for i in v if i not in found_objects]
+                raise ValueError(
+                    f"The following districts were not found in the database: {not_available_items}"
+                )
         elif granularity == enums.SpatialUnit.MUNICIPALITIES:
             municipal_query = sql.select(
-                [database.tables.municipals.c.name], database.tables.municipals.c.name.in_(v)
+                [database.tables.municipals.c.name],
+                database.tables.municipals.c.name.in_(v),
             )
             results = database.engine.execute(municipal_query).all()
-            found_objects = [row[0] for row in results]
-            for obj in v:
-                if obj not in found_objects:
-                    raise ValueError(f"The municipal {obj} was not found in the database")
+            found_objects = sorted([row[0] for row in results])
+            if v != found_objects:
+                not_available_items = [i for i in v if i not in found_objects]
+                raise ValueError(
+                    f"The following municipals were not found in the database:"
+                    f" {not_available_items}"
+                )
         return v
 
     @pydantic.validator("consumer_groups", always=True)
     def check_consumer_groups(cls, v):
         if v is None:
-            consumer_group_pull_query = sql.select([database.tables.consumer_groups.c.parameter])
+            consumer_group_pull_query = sql.select(
+                [database.tables.consumer_groups.c.parameter]
+            )
             results = database.engine.execute(consumer_group_pull_query).all()
             return [row[0] for row in results]
         else:
@@ -151,5 +161,7 @@ class ForecastQuery(BaseModel):
             found_objects = [row[0] for row in results]
             for obj in v:
                 if obj not in found_objects:
-                    raise ValueError(f"The consumer group {obj} was not found in the database")
+                    raise ValueError(
+                        f"The consumer group {obj} was not found in the database"
+                    )
             return v

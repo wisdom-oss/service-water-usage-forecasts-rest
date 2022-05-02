@@ -1,32 +1,40 @@
+import asyncio
 import datetime
 import email.utils
 import hashlib
 import json
 import logging
 import re
+import sys
 import time
 import typing
 import urllib.parse
 import uuid
-import pytz
 
 import amqp_rpc_client
+import fastapi.middleware.gzip
 import fastapi.exceptions
 import py_eureka_client.eureka_client
+import pydantic
+import pytz
 import sqlalchemy.orm
+import sqlalchemy_utils as db_utils
 import starlette
 import starlette.requests
 import starlette.responses
+import ujson as ujson
+from pydantic import ValidationError
 
 import api.functions
 import database
 import database.tables
 import enums
-import exceptions
 import models.amqp
 import settings
 
 # Create a new logger for the api
+import tools
+
 _logger = logging.getLogger(__name__)
 # Read the settings needed for the api (in this case all)
 _service_settings = settings.ServiceSettings()
@@ -36,6 +44,7 @@ _security_settings = settings.SecuritySettings()
 
 # Create a new FastAPI Application for the service
 service = fastapi.FastAPI()
+service.add_middleware(fastapi.middleware.gzip.GZipMiddleware)
 
 # Prepare global instances of the service registry client and the amqp client
 _registry_client: typing.Optional[py_eureka_client.eureka_client.EurekaClient] = None
@@ -47,8 +56,101 @@ _amqp_client: typing.Optional[amqp_rpc_client.Client] = None
 
 
 @service.on_event("startup")
-def _service_startup():
+async def _service_startup():
     """Handler for the service startup"""
+    # Read the service settings
+    _service_settings = settings.ServiceSettings()
+    # Configure the logging module
+    logging.basicConfig(
+        format="%(levelname)-8s | %(asctime)s | %(name)-25s | %(message)s",
+        level=tools.resolve_log_level(_service_settings.logging_level),
+    )
+    # Log a startup message
+    logging.info("Starting the %s service", _service_settings.name)
+    logging.debug("Reading the settings for the AMQP connection")
+    try:
+        _amqp_settings = settings.AMQPSettings()
+    except ValidationError:
+        logging.critical(
+            "Unable to read the AMQP related settings. Please refer to the "
+            "documentation for further instructions: AMQP_SETTINGS_INVALID"
+        )
+        sys.exit(1)
+    logging.debug(
+        "Successfully read the settings for the AMQP connection: %s", _amqp_settings
+    )
+    logging.debug("Reading the settings for the database connection")
+    try:
+        _database_settings = settings.DatabaseSettings()
+    except ValidationError:
+        logging.critical(
+            "Unable to read the database related settings. Please refer to "
+            "the documentation for further instructions: "
+            "DATABASE_SETTINGS_INVALID"
+        )
+        sys.exit(1)
+    logging.debug(
+        "Successfully read the settings for the database connection: %s",
+        _database_settings,
+    )
+    logging.debug("Reading the settings for the authorization mechanism")
+    try:
+        _security_settings = settings.SecuritySettings()
+    except ValidationError:
+        logging.critical("Unable to read the settings for the security settings")
+        sys.exit(1)
+    logging.debug(
+        "Successfully read the settings for the security measures: %s",
+        _security_settings,
+    )
+    # = Service Registry Connection =
+
+    # = AMQP Message Broker =
+    logging.info("Checking the connection to the message broker")
+    _message_broker_available = await tools.is_host_available(
+        host=_amqp_settings.dsn.host,
+        port=int(_amqp_settings.dsn.port)
+        if _amqp_settings.dsn.port is not None
+        else 5672,
+    )
+    if not _message_broker_available:
+        logging.critical(
+            "The message broker is not reachable. Therefore, this service is unable to transmit "
+            "the forecast requests to the calculation service."
+        )
+        sys.exit(2)
+    # = Database connection =
+    logging.info("Checking the connection to the database server")
+    _database_available = await tools.is_host_available(
+        host=_database_settings.dsn.host,
+        port=3306
+        if _database_settings.dsn.port is None
+        else int(_database_settings.dsn.port),
+    )
+    if not _database_available:
+        logging.critical(
+            "The database server is not reachable. Therefore, this service is unable to get water "
+            "usages from the database"
+        )
+        sys.exit(2)
+    # = Database existence check =
+    if not db_utils.database_exists(_database_settings.dsn):
+        logging.warning(
+            "The specified datasource does not exist. Trying to create the database "
+            "and populating it with example data"
+        )
+        try:
+            db_utils.create_database(_database_settings.dsn)
+        except Exception as db_error:
+            logging.critical(
+                "Failed to create the database due to the following error: %s", db_error
+            )
+            sys.exit(3)
+        # Create the table metadata
+        logging.info("Created the specified datasource")
+        database.tables.initialize_tables()
+    else:
+        logging.info("Found an existing datasource which will be used")
     _logger.info("Starting the RESTful API")
     _logger.debug("Accessing the global service registry client and AMQP RPC client")
     # Access the global service registry client and amqp rpc client
@@ -57,10 +159,10 @@ def _service_startup():
     _registry_client = py_eureka_client.eureka_client.EurekaClient(
         eureka_server=f"http://{_registry_settings.host}:{_registry_settings.port}/",
         app_name=_service_settings.name,
-        instance_port=_service_settings.http_port,
+        instance_port=5000,
         should_register=True,
         should_discover=False,
-        renewal_interval_in_secs=1,
+        renewal_interval_in_secs=30,
         duration_in_secs=30,
     )
     # Initialize a new AMQP Client
@@ -74,14 +176,7 @@ def _service_startup():
         "requests"
     )
     _registry_client.status_update(py_eureka_client.eureka_client.INSTANCE_STATUS_UP)
-    _logger.info('Waiting for new requests...')
-
-
-@service.on_event("shutdown")
-def _service_shutdown():
-    """Handle the service shutdown"""
-    # Inform the service registry that the service is going offline and stop the eureka client
-    _registry_client.stop()
+    _logger.info("Waiting for new requests...")
 
 
 # ===== Middlewares ======
@@ -306,22 +401,30 @@ async def forecast(
     # Save the current time to add it to the response headers
     forecast_start = time.time()
     # Check if the spatial unit is for the municipalities or the districts
-    forecast_query = models.amqp.ForecastQuery(
-        granularity=spatial_unit,
-        model=forecast_model,
-        objects=districts,
-        consumer_groups=consumer_groups
+    try:
+        forecast_query = models.amqp.ForecastQuery(
+            granularity=spatial_unit,
+            model=forecast_model,
+            objects=districts,
+            consumer_groups=consumer_groups,
+        )
+    except pydantic.ValidationError as e:
+        print(e.json())
+        return e.json()
+    _query_id = _amqp_client.send(
+        forecast_query.json(by_alias=True), _amqp_settings.exchange
     )
-    _query_id = _amqp_client.send(forecast_query.json(by_alias=True), _amqp_settings.exchange)
     query_wait_time_start = time.time()
-    _query_response = _amqp_client.await_response(_query_id, timeout=120)
+    _query_response = _amqp_client.await_response(_query_id, timeout=90)
     query_wait_time_stop = time.time()
     if _query_response is None:
-        return starlette.responses.Response(
-            status_code=412
-        )
-    return starlette.responses.JSONResponse(
+        return starlette.responses.Response(status_code=412)
+    return starlette.responses.Response(
         status_code=200,
-        headers={"X-Forecast-Duration": str(time.time() - forecast_start), "X-AMQP-WaitTime": str(query_wait_time_stop - query_wait_time_start)},
-        content=json.loads(_query_response),
+        headers={
+            "X-Forecast-Duration": str(time.time() - forecast_start),
+            "X-AMQP-WaitTime": str(query_wait_time_stop - query_wait_time_start),
+        },
+        content=_query_response,
+        media_type="text/json",
     )
