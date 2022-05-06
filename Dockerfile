@@ -8,6 +8,8 @@ WORKDIR /opt/water-usage-forecast-rest
 # Copy and install the requirements
 COPY . /opt/water-usage-forecast-rest
 RUN python -m pip install -r /opt/water-usage-forecast-rest/requirements.txt
+RUN python -m pip install gunicorn
+RUN ls
 
 EXPOSE 5000
-ENTRYPOINT ["python", "service.py"]
+ENTRYPOINT ["gunicorn", "-cgunicorn.config.py", "api:service"]

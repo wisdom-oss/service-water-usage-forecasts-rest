@@ -2,7 +2,10 @@ import typing
 
 import pydantic
 from pydantic import Field
+from sqlalchemy import sql
 
+import database
+import database.tables
 import enums
 from .. import BaseModel
 
@@ -64,27 +67,79 @@ class WaterUsages(BaseModel):
         return values
 
 
-class ForecastRequest(BaseModel):
-    type: enums.ForecastModel = pydantic.Field(default=..., alias="forecastType")
-    """
-    Forecast Type
+class ForecastQuery(BaseModel):
+    """A model describing, how the incoming request shall look like"""
 
-    The type of forecast which shall be executed
-    """
+    model: enums.ForecastModel = pydantic.Field(default=..., alias="model")
+    """The forecast model which shall be used to forecast the usage values"""
 
-    predicted_years: typing.Optional[int] = pydantic.Field(
-        default=15, alias="predictedYears"
+    keys: list[str] = pydantic.Field(default=..., alias="keys")
+    """The municipal and district keys for which objects the forecast shall be executed"""
+
+    consumer_groups: typing.Optional[list[str]] = pydantic.Field(
+        default=None, alias="consumerGroups"
     )
-    """
-    Predicted Years
+    """The consumer groups for which the forecast shall be calculated"""
 
-    The amount of years which shall be predicted with the supplied model
-    """
+    forecast_size: int = pydantic.Field(default=20, alias="forecastSize", gt=0)
+    """The amount of years for which the forecast shall be calculated"""
 
-    usage_data: WaterUsages = pydantic.Field(default=..., alias="usageData")
-    """
-    Actual water usage data
+    @pydantic.validator("keys")
+    def check_keys(cls, v):
+        """
+        Check if the keys are of a valid length and are present in the database
 
-    This object contains the current water usages and the range of years for the current water
-    usages
-    """
+        :param v: The values which are already present in the database
+        :return: The object containing the keys
+        """
+        if v is None:
+            raise ValueError("At least one key needs to be present in the list of keys")
+        # Split the keys into a district and a municipal list
+        municipal_keys = [k for k in v if len(k) == 8]
+        district_keys = [k for k in v if len(k) == 5]
+        unknown_keys = [k for k in v if len(k) not in [5, 8]]
+        # Now check if any unknown keys have been sent
+        if len(unknown_keys) > 0:
+            raise ValueError(
+                f"The following keys have not been recognized by the module: {unknown_keys}"
+            )
+        # Now check if the keys are present in the database
+        municipal_query = sql.select(
+            [database.tables.municipals.c.key],
+            database.tables.municipals.c.key.in_(municipal_keys),
+        )
+        db_municipals = database.engine.execute(municipal_query).all()
+        unrecognized_keys = [k for k in municipal_keys if (k,) not in db_municipals]
+        district_keys_query = sql.select(
+            [database.tables.districts.c.key],
+            database.tables.districts.c.key.in_(district_keys),
+        )
+        db_districts = database.engine.execute(district_keys_query).all()
+        unrecognized_keys += [k for k in district_keys if (k,) not in db_districts]
+        if len(unrecognized_keys) > 0:
+            raise ValueError(
+                f"The following keys have not been recognized by the module: {unrecognized_keys}"
+            )
+        return v
+
+    @pydantic.validator("consumer_groups", always=True)
+    def check_consumer_groups(cls, v):
+        if v is None:
+            consumer_group_pull_query = sql.select(
+                [database.tables.consumer_groups.c.parameter]
+            )
+            results = database.engine.execute(consumer_group_pull_query).all()
+            return [row[0] for row in results]
+        else:
+            consumer_group_query = sql.select(
+                [database.tables.consumer_groups.c.parameter],
+                database.tables.consumer_groups.c.parameter.in_(v),
+            )
+            results = database.engine.execute(consumer_group_query).all()
+            found_objects = [row[0] for row in results]
+            for obj in v:
+                if obj not in found_objects:
+                    raise ValueError(
+                        f"The consumer group {obj} was not found in the database"
+                    )
+            return v
