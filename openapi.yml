@@ -1,88 +1,21 @@
 openapi: 3.0.3
 info:
-  title: WISdoM OSS - Water Usage Forecasts
-  version: "0.1"
+  title: "Water Usage Forecasts"
+  version: "2.0"
 
-components:
-  schemas:
-    WaterUsage:
-      type: object
-      properties:
-        startYear:
-          type: integer
-        endYear:
-          type: integer
-        usageAmounts:
-          type: array
-          items:
-            type: number
-    ForecastType:
-      type: string
-      enum:
-        - logarithmic
-        - linear
-        - polynomial
-    ConsumerGroup:
-      type: string
-      enum:
-        - businesses
-        - households_and_small_businesses
-        - farming_forestry_fishing_industry
-        - public_institutions
-        - all
-      default: all
+
 
 paths:
-  /:
-    get:
-      summary: Get the communes, counties, consumer tpyes and forecast types available currently
-      responses:
-        200:
-          description: The data is available
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  communes:
-                    description: Name of the communes available for water usage forecast requests
-                    type: array
-                    items:
-                      type: string
-                  counties:
-                    description: Name of the counties available for water usage requests
-                    type: array
-                    items:
-                      type: string
-                  consumerGroups:
-                    description: NAmes of the consumer groups available for filtering the complete usage data
-                    type: array
-                    items:
-                      type: string
-                  forecastTypes:
-                    description: Names of the forecast types available
-                    type: array
-                    items:
-                      type: string
-
-  /{spatialUnit}/{forecastModel}:
+  /{forecastModel}:
     get:
       summary: Run a new Prognosis and get the data of it
       parameters:
-        - in: path
-          name: spatialUnit
-          required: true
-          schema:
-            type: string
-            enum:
-              - commune
-              - county
         - in: query
-          name: district
+          name: key
           required: true
           style: form
           explode: true
-          description: District of the spatial Unit for which the forecast should be run
+          description: The official municipal key of a municipal or the identifier of a region (abbreviated municipal key)
           schema:
             type: string
         - in: path
@@ -95,71 +28,328 @@ paths:
               - logarithmic
               - linear
               - polynomial
-        - in: query
-          name: consumerGroup
-          required: false
-          description: Consumer Group for which the forecast is run
 
-          schema:
-            $ref: '#/components/schemas/ConsumerGroup'
       responses:
         200:
           description: The forecast was run successfully
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                      required: true
-                      description: The name of the district that was selected
-                    consumerGroup:
-                      type: string
-                      required: true
-                    forecastType:
-                      type: string
-                      required: true
-                    forecastEquation:
-                      type: string
-                      required: true
-                    forecastScore:
-                      type: number
-                      required: true
-                    forecastUsages:
-                      $ref: "#/components/schemas/WaterUsage"
-                    referenceUsages:
-                      $ref: "#/components/schemas/WaterUsage"
-
-  /import/{dataType}:
-    parameters:
-      - name: dataType
-        in: path
-        required: true
-        schema:
-          default: communes
-          type: string
-          enum:
-            - communes
-            - counties
-            - consumerTypes
-            - usages
-    put:
-      summary: Import the sent file
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: data
-              properties:
-                data:
-                  type: string
-                  format: binary
-      responses:
-        201:
-          description: The import was successful
-        409:
-          description: During the import a ForeignKey or Constraint was violated
+                type: object
+                properties:
+                  partials:
+                    title: Partial Forecast Data
+                    description: This array contains the single forecast calculations which have been executed to get the data
+                    type: array
+                    items:
+                      type: object
+                      title: Single Forecast Data
+                      description: A single forecast calculation
+                      properties:
+                        consumerGroup:
+                          type: object
+                          title: Consumer Group
+                          description: Information about the consumer groups for which this forecast has been calculated
+                          properties:
+                            key:
+                              type: string
+                              example: "public_institutions"
+                              title: Consumer Group Query Parameter
+                              description: The query parameter which may be used to limit the execution of a forecast to this consumer group
+                            name:
+                              type: string
+                              title: Consumer Group Name
+                              description: The name of the consumer group which may be displayed in the frontend
+                              example: "Public Institution"
+                        municipal:
+                          type: object
+                          title: Municipal
+                          description: Information about the municipal for which this forecast has been calculated
+                          properties:
+                            key:
+                              type: string
+                              title: Official municipal key (AGS)
+                              description: The official municipal key used to identify this municipal in official matters
+                              example: "03358013"
+                            name:
+                              type: string
+                              title: Municipal Name
+                              description: The name of the municipal
+                              example: "Häuslingen"
+                        forecast:
+                          type: object
+                          title: Forecast Information
+                          description: The information about the executed forecast
+                          properties:
+                            model:
+                              title: Forecast Model
+                              description: The forecast model used to fit the reference values for this municipal
+                              type: string
+                              enum:
+                                - logarithmic
+                                - linear
+                                - polynomial
+                              example: linear
+                            equation:
+                              type: string
+                              title: Forecast Equation
+                              description: The equation used by numpy to calculate the forecasted values
+                              example: "210450.37500000326 + 38667.7083333331 x**1"
+                            score:
+                              type: number
+                              title: Forecast Score
+                              description: The R² score of the forecast indicating how good the fitted equation fits the reference data
+                              example: 0.8495443413931695
+                            usages:
+                              type: object
+                              title: Forecasted Usages
+                              properties:
+                                start:
+                                  title: Start of the forecasted data
+                                  description: The year in which the forecasted data will start [inclusive]
+                                  type: integer
+                                  example: 2018
+                                end:
+                                  title: End of the forecasted data
+                                  description: The year in which the forecasted data will end [inclusive]
+                                  type: integer
+                                  example: 2037
+                                amounts:
+                                  title: Forecasted Amounts
+                                  description: The forecasted usage amounts for the given time period
+                                  type: array
+                                  items:
+                                    type: number
+                                  example:
+                                    - 250540.35714285774
+                                    - 255378.8809523805
+                                    - 260217.4047619052
+                                    - 265055.9285714299
+                                    - 269894.45238095266
+                                    - 274732.9761904774
+                                    - 279571.5000000001
+                                    - 284410.02380952484
+                                    - 289248.54761904763
+                                    - 294087.0714285723
+                                    - 298925.595238097
+                                    - 303764.11904761975
+                                    - 308602.64285714447
+                                    - 313441.16666666727
+                                    - 318279.6904761919
+                                    - 323118.2142857147
+                                    - 327956.73809523945
+                                    - 332795.2619047641
+                                    - 337633.7857142869
+                                    - 342472.3095238116
+                          required:
+                            - model
+                            - equation
+                            - score
+                            - usages
+                        referenceUsages:
+                          type: object
+                          properties:
+                            start:
+                              title: Start of the reference data
+                              description: The year in which the reference data will start [inclusive]
+                              type: integer
+                              example: 2010
+                            end:
+                              title: End of the reference data
+                              description: The year in which the reference data will end [inclusive]
+                              type: integer
+                              example: 2017
+                            amounts:
+                              title: Reference Amounts
+                              description: The reference usage amounts used to create the model
+                              type: number
+                              example:
+                                - 188199.0
+                                - 182194.0
+                                - 183018.0
+                                - 195584.0
+                                - 208507.0
+                                - 219576.0
+                                - 255942.0
+                                - 250583.0
+                  accumulations:
+                    type: object
+                    title: Accumulated Values
+                    description: This object contains the accumulations by the selected municipals and the selected consumer types
+                    properties:
+                      municipal:
+                        title: Accumulations by Municipal
+                        description: The accumulations by the municipals
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            municipal:
+                              type: object
+                              title: Municipal
+                              description: Information about the municipal for which this forecast has been calculated
+                              properties:
+                                key:
+                                  type: string
+                                  title: Official municipal key (AGS)
+                                  description: The official municipal key used to identify this municipal in official matters
+                                  example: "03358013"
+                                name:
+                                  type: string
+                                  title: Municipal Name
+                                  description: The name of the municipal
+                                  example: "Häuslingen"
+                            referenceUsages:
+                              type: object
+                              properties:
+                                start:
+                                  title: Start of the reference data
+                                  description: The year in which the reference data will start [inclusive]
+                                  type: integer
+                                  example: 2010
+                                end:
+                                  title: End of the reference data
+                                  description: The year in which the reference data will end [inclusive]
+                                  type: integer
+                                  example: 2017
+                                amounts:
+                                  title: Reference Amounts
+                                  description: The reference usage amounts used to create the model
+                                  type: number
+                                  example:
+                                    - 188199.0
+                                    - 182194.0
+                                    - 183018.0
+                                    - 195584.0
+                                    - 208507.0
+                                    - 219576.0
+                                    - 255942.0
+                                    - 250583.0
+                            forecastUsages:
+                              type: object
+                              title: Forecasted Usages
+                              properties:
+                                start:
+                                  title: Start of the forecasted data
+                                  description: The year in which the forecasted data will start [inclusive]
+                                  type: integer
+                                  example: 2018
+                                end:
+                                  title: End of the forecasted data
+                                  description: The year in which the forecasted data will end [inclusive]
+                                  type: integer
+                                  example: 2037
+                                amounts:
+                                  title: Forecasted Amounts
+                                  description: The forecasted usage amounts for the given time period
+                                  type: array
+                                  items:
+                                    type: number
+                                  example:
+                                    - 250540.35714285774
+                                    - 255378.8809523805
+                                    - 260217.4047619052
+                                    - 265055.9285714299
+                                    - 269894.45238095266
+                                    - 274732.9761904774
+                                    - 279571.5000000001
+                                    - 284410.02380952484
+                                    - 289248.54761904763
+                                    - 294087.0714285723
+                                    - 298925.595238097
+                                    - 303764.11904761975
+                                    - 308602.64285714447
+                                    - 313441.16666666727
+                                    - 318279.6904761919
+                                    - 323118.2142857147
+                                    - 327956.73809523945
+                                    - 332795.2619047641
+                                    - 337633.7857142869
+                            consumerGroup:
+                              title: Accumulations by Consumer Groups
+                              description: The accumulations by the consumer groups
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  consumerGroup:
+                                    type: object
+                                    title: Consumer Group
+                                    description: Information about the consumer groups for which this forecast has been calculated
+                                    properties:
+                                      key:
+                                        type: string
+                                        example: "public_institutions"
+                                        title: Consumer Group Query Parameter
+                                        description: The query parameter which may be used to limit the execution of a forecast to this consumer group
+                                      name:
+                                        type: string
+                                        title: Consumer Group Name
+                                        description: The name of the consumer group which may be displayed in the frontend
+                                        example: "Public Institution"
+                                  referenceUsages:
+                                    type: object
+                                    properties:
+                                      start:
+                                        title: Start of the reference data
+                                        description: The year in which the reference data will start [inclusive]
+                                        type: integer
+                                        example: 2010
+                                      end:
+                                        title: End of the reference data
+                                        description: The year in which the reference data will end [inclusive]
+                                        type: integer
+                                        example: 2017
+                                      amounts:
+                                        title: Reference Amounts
+                                        description: The reference usage amounts used to create the model
+                                        type: number
+                                        example:
+                                          - 188199.0
+                                          - 182194.0
+                                          - 183018.0
+                                          - 195584.0
+                                          - 208507.0
+                                          - 219576.0
+                                          - 255942.0
+                                          - 250583.0
+                                  forecastUsages:
+                                    type: object
+                                    title: Forecasted Usages
+                                    properties:
+                                      start:
+                                        title: Start of the forecasted data
+                                        description: The year in which the forecasted data will start [inclusive]
+                                        type: integer
+                                        example: 2018
+                                      end:
+                                        title: End of the forecasted data
+                                        description: The year in which the forecasted data will end [inclusive]
+                                        type: integer
+                                        example: 2037
+                                      amounts:
+                                        title: Forecasted Amounts
+                                        description: The forecasted usage amounts for the given time period
+                                        type: array
+                                        items:
+                                          type: number
+                                        example:
+                                          - 250540.35714285774
+                                          - 255378.8809523805
+                                          - 260217.4047619052
+                                          - 265055.9285714299
+                                          - 269894.45238095266
+                                          - 274732.9761904774
+                                          - 279571.5000000001
+                                          - 284410.02380952484
+                                          - 289248.54761904763
+                                          - 294087.0714285723
+                                          - 298925.595238097
+                                          - 303764.11904761975
+                                          - 308602.64285714447
+                                          - 313441.16666666727
+                                          - 318279.6904761919
+                                          - 323118.2142857147
+                                          - 327956.73809523945
+                                          - 332795.2619047641
+                                          - 337633.7857142869
