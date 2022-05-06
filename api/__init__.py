@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import email.utils
 import hashlib
@@ -8,21 +7,18 @@ import re
 import sys
 import time
 import typing
-import urllib.parse
 import uuid
 
 import amqp_rpc_client
-import fastapi.middleware.gzip
 import fastapi.exceptions
+import fastapi.middleware.gzip
 import py_eureka_client.eureka_client
 import pydantic
 import pytz
-import sqlalchemy.orm
 import sqlalchemy_utils as db_utils
 import starlette
 import starlette.requests
 import starlette.responses
-import ujson as ujson
 from pydantic import ValidationError
 
 import api.functions
