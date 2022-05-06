@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import email.utils
 import hashlib
@@ -8,21 +7,18 @@ import re
 import sys
 import time
 import typing
-import urllib.parse
 import uuid
 
 import amqp_rpc_client
-import fastapi.middleware.gzip
 import fastapi.exceptions
+import fastapi.middleware.gzip
 import py_eureka_client.eureka_client
 import pydantic
 import pytz
-import sqlalchemy.orm
 import sqlalchemy_utils as db_utils
 import starlette
 import starlette.requests
 import starlette.responses
-import ujson as ujson
 from pydantic import ValidationError
 
 import api.functions
@@ -181,62 +177,71 @@ async def _service_startup():
 
 # ===== Middlewares ======
 @service.middleware("http")
-async def _caching_check(request: starlette.requests.Request, call_next):
-    # Get the forecast parameters
-    request_path = request.url.path
-    raw_request_parameter = str(request.query_params)
-    # Now parse the raw request parameters
-    request_parameter = urllib.parse.parse_qs(raw_request_parameter)
-    forecast_spatial_unit = request_path.split("/")[1]
-    forecast_model = request_path.split("/")[2]
-    forecast_districts = request_parameter.get("district", [])
-    forecast_consumer_groups = request_parameter.get("consumerGroup", [])
-    # Now sort the districts and consumer groups
-    forecast_districts = sorted(forecast_districts)
-    forecast_consumer_groups = sorted(forecast_consumer_groups)
-    # Now put that all into a dict
-    forecast_parameter = {
-        "spatialUnit": forecast_spatial_unit,
-        "forecastModel": forecast_model,
-        "districts": forecast_districts,
-        "consumerGroups": forecast_consumer_groups,
+async def etag_comparison(request: starlette.requests.Request, call_next):
+    """
+    A middleware which will hash the request path and all parameters transferred to this
+    microservice and will check if the hash matches the one of the ETag which was sent to the
+    microservice. Furthermore, it will take the generated hash and append it to the response to
+    allow caching
+
+    :param request: The incoming request
+    :type request: starlette.requests.Request
+    :param call_next: The next call after this middleware
+    :type call_next: callable
+    :return: The result of the next call after this middle ware
+    :rtype: starlette.responses.Response
+    """
+    # Access all parameters used for creating the hash
+    path = request.url.path
+    query_parameter = dict(request.query_params)
+    content_type = request.headers.get("Content-Type", "text/plain")
+
+    if content_type == "application/json":
+        try:
+            body = json.loads(await request.body())
+        except json.JSONDecodeError as error:
+            body = (await request.body()).decode("utf-8")
+    else:
+        body = (await request.body()).decode("utf-8")
+
+    # Now iterate through all query parameters and make sure they are sorted if they are lists
+    for key, value in dict(query_parameter).items():
+        # Now check if the value is a list
+        if isinstance(value, list):
+            query_parameter[key] = sorted(value)
+
+    query_dict = {
+        "request_path": path,
+        "request_query_parameter": query_parameter,
+        "request_body": body,
     }
-    # Now jsonify the parameters
-    forecast_parameter_json = json.dumps(
-        forecast_parameter, ensure_ascii=False, sort_keys=False
-    )
-    # Now create the hashsum of the parameters
-    forecast_request_hash = hashlib.md5(
-        forecast_parameter_json.encode("utf-8")
-    ).hexdigest()
-    # Now get the time of the last update to any of the tables in the system
-    last_database_update = functions.get_last_database_update(
+    query_data = json.dumps(query_dict, ensure_ascii=False, sort_keys=True)
+    # Now create a hashsum of the query data
+    query_hash = hashlib.sha3_256(query_data.encode("utf-8"))
+    # Now access the headers of the request and check for the If-None-Match Header
+    if_none_match_value = request.headers.get("If-None-Match")
+    if_modified_since_value = request.headers.get("If-Modified-Since")
+    if if_modified_since_value is None:
+        if_modified_since_value = datetime.datetime.fromtimestamp(0, tz=pytz.UTC)
+    else:
+        if_modified_since_value = email.utils.parsedate_to_datetime(
+            if_modified_since_value
+        )
+    last_database_modification = functions.get_last_database_update(
         "water_usage", database.engine
     )
-    # Now get the value of the "If-None-Match" and "If-Modified-Since" headers
-    e_tag = request.headers.get("If-None-Match")
-    data_last_modification = request.headers.get("If-Modified-Since")
-    # Now parse the last_update to a python datetime object
-    if data_last_modification is None:
-        last_known_update = datetime.datetime.fromtimestamp(0, tz=pytz.UTC)
-    else:
-        last_known_update = email.utils.parsedate_to_datetime(data_last_modification)
-    e_tag_matches_request = e_tag == forecast_request_hash
-    database_updated = last_known_update < last_database_update
-    if e_tag_matches_request and not database_updated:
+    data_has_changed = if_modified_since_value < last_database_modification
+    if query_hash == if_none_match_value and not data_has_changed:
         return starlette.responses.Response(
-            status_code=304,
-            headers={
-                "ETag": forecast_request_hash,
-                "Last-Modified": email.utils.format_datetime(last_database_update),
-            },
+            status_code=304, headers={"ETag": f'"{query_hash}"'}
         )
-    request_response: starlette.responses.Response = await call_next(request)
-    request_response.headers.append("ETag", forecast_request_hash)
-    request_response.headers.append(
-        "Last-Modified", email.utils.format_datetime(last_database_update)
-    )
-    return request_response
+    else:
+        response: starlette.responses.Response = await call_next(request)
+        response.headers.append("ETag", f'"{query_hash}"')
+        response.headers.append(
+            "Last-Modified", email.utils.format_datetime(last_database_modification)
+        )
+        return response
 
 
 @service.middleware("http")
@@ -259,29 +264,51 @@ async def _token_check(request: starlette.requests.Request, call_next):
     authorization_header: typing.Optional[str] = headers.get("Authorization")
     if authorization_header is None:
         # Since no authorization header was set return a response indicating this error
-        return starlette.responses.Response(
+        return fastapi.responses.UJSONResponse(
             status_code=400,
-            headers={"WWW-Authenticate": "Bearer error=invalid_request"},
+            headers={"WWW-Authenticate": 'Bearer error="invalid_request"'},
+            content={
+                "httpCode": 400,
+                "httpError": "Bad Request",
+                "error": _service_settings.name + ".MISSING_CREDENTIALS",
+                "errorName": "Unauthorized Request",
+                "errorDescription": "The request did not contain any valid authorization "
+                "information",
+            },
         )
     # Strip any excess whitespaces from the header
     authorization_header = authorization_header.strip()
     # Since an Authorization header was found check if the header has a value
     if len(authorization_header) == 0:
         # Since the header has no value. Indicate that the request was invalid
-        return starlette.responses.Response(
+        return fastapi.responses.UJSONResponse(
             status_code=400,
-            headers={"WWW-Authenticate": "Bearer error=invalid_request"},
+            headers={"WWW-Authenticate": 'Bearer error="invalid_request"'},
+            content={
+                "httpCode": 400,
+                "httpError": "Bad Request",
+                "error": _service_settings.name + ".BAD_AUTHORIZATION_HEADER",
+                "errorName": "Unauthorized Request",
+                "errorDescription": "The request did contain an empty authorization header",
+            },
         )
     # Now check if the Authorization header either starts with "Bearer" or "bearer" or any lower
     # and uppercase variant
     if not re.match("Bearer", authorization_header, re.IGNORECASE):
         # Since the header contained an unsupported authorization scheme, inform the client of
         # this error
-        return starlette.responses.Response(
+        return fastapi.responses.UJSONResponse(
             status_code=400,
             headers={
                 "WWW-Authenticate": 'Bearer error="invalid_request",'
                 'error_description="Unsupported authorization scheme"'
+            },
+            content={
+                "httpCode": 400,
+                "httpError": "Bad Request",
+                "error": _service_settings.name + ".INVALID_AUTHORIZATION_SCHEME",
+                "errorName": "Unauthorized Request",
+                "errorDescription": "The request did contain an recognized authorization scheme",
             },
         )
     # Since the header contained Bearer as authorization method extract the Bearer token from the
@@ -293,9 +320,16 @@ async def _token_check(request: starlette.requests.Request, call_next):
         _ = uuid.UUID(bearer_token)
     except ValueError:
         # Since the bearer token could not be converted to an uuid return a error to the end user
-        return starlette.responses.Response(
-            status_code=401,
+        return fastapi.responses.UJSONResponse(
+            status_code=400,
             headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+            content={
+                "httpCode": 400,
+                "httpError": "Bad Request",
+                "error": _service_settings.name + ".INVALID_TOKEN_FORMAT",
+                "errorName": "Unauthorized Request",
+                "errorDescription": "The request did contain an correctly formatted bearer token",
+            },
         )
     # Since the bearer token passed all checks send a introspection request to determine if the
     # token has the correct scope for accessing this service
@@ -325,13 +359,15 @@ async def _token_check(request: starlette.requests.Request, call_next):
         _introspection_request_id, timeout=5
     )
     if raw_introspection_response is None:
-        return starlette.responses.JSONResponse(
-            status_code=503,
+        return fastapi.responses.UJSONResponse(
+            status_code=500,
             content={
-                "error": "token_introspection_timeout",
-                "error_description": "The Bearer token included in the request could not be "
-                "validated in a appropriate amount of time. Please try again "
-                "later",
+                "httpCode": 500,
+                "httpError": "Internal Server Error",
+                "error": _service_settings.name + ".TOKEN_INTROSPECTION_TIMEOUT",
+                "errorName": "Token Introspection Timeout",
+                "errorDescription": "The token could not be validated in a appropriate amount of "
+                "time",
             },
             headers={"Retry-After": "30"},
         )
@@ -339,32 +375,58 @@ async def _token_check(request: starlette.requests.Request, call_next):
     try:
         introspection_response: dict = json.loads(raw_introspection_response)
     except json.JSONDecodeError:
-        return starlette.responses.JSONResponse(
-            status_code=503,
+        return fastapi.responses.UJSONResponse(
+            status_code=500,
             content={
-                "error": "token_introspection_error",
-                "error_description": "The token introspection could not be read successfully. The "
-                "request is cancelled to secure the service",
+                "httpCode": 500,
+                "httpError": "Internal Server Error",
+                "error": _service_settings.name + ".TOKEN_INTROSPECTION_ERROR",
+                "errorName": "Token Introspection Timeout",
+                "errorDescription": "The token introspection did not return a valid response",
             },
-            headers={"Retry-After": "30"},
         )
     # Now check if the response indicates if the token is valid
     token_valid = introspection_response.get("active", None)
     if token_valid is None:
-        return starlette.responses.JSONResponse(
-            status_code=503,
+        return fastapi.responses.UJSONResponse(
+            status_code=500,
             content={
-                "error": "token_introspection_error",
-                "error_description": "The token introspection could not be read successfully. The "
-                "request is cancelled to secure the service",
+                "httpCode": 500,
+                "httpError": "Internal Server Error",
+                "error": _service_settings.name + ".TOKEN_INTROSPECTION_ERROR",
+                "errorName": "Token Introspection Timeout",
+                "errorDescription": "The token introspection did not return a valid response",
             },
             headers={"Retry-After": "30"},
         )
     if token_valid is not True:
-        return starlette.responses.Response(
-            status_code=401,
-            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
-        )
+        error_reason = introspection_response.get("reason", None)
+        if error_reason is None:
+            return fastapi.responses.UJSONResponse(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+                content={
+                    "httpCode": 401,
+                    "httpError": "Unauthorized",
+                    "error": _service_settings.name + ".UNAUTHORIZED_REQUEST",
+                    "errorName": "Unauthorized Request",
+                    "errorDescription": "The request did not contain any valid authorization "
+                    "information",
+                },
+            )
+        elif error_reason == "token_expired":
+            return fastapi.responses.UJSONResponse(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+                content={
+                    "httpCode": 401,
+                    "httpError": "Unauthorized",
+                    "error": _service_settings.name + ".ACCESS_TOKEN_EXPIRED",
+                    "errorName": "Unauthorized Request",
+                    "errorDescription": "The request did not contain a active bearer token",
+                },
+            )
+
     # Since the token is valid let the request continue and return the response
     request_response = await call_next(request)
     return request_response
@@ -373,28 +435,23 @@ async def _token_check(request: starlette.requests.Request, call_next):
 # ===== Routes =====
 
 
-@service.get(path="/{spatial_unit}/{forecast_model}")
+@service.get(path="/{forecast_model}")
 async def forecast(
-    spatial_unit: enums.SpatialUnit,
     forecast_model: enums.ForecastModel,
-    districts: list[str] = fastapi.Query(default=..., alias="district"),
+    keys: list[str] = fastapi.Query(default=..., alias="key"),
     consumer_groups: list[str] = fastapi.Query(default=None, alias="consumerGroup"),
 ):
     """
     Execute a new forecast
 
-    :param spatial_unit: The spatial unit used for the request
-    :type spatial_unit: enums.SpatialUnit
     :param forecast_model: The forecast model which shall be used
     :type forecast_model: enums.ForecastModel
-    :param districts: The districts that shall be used for the forecasts
-    :type districts: list[str]
+    :param keys: The districts that shall be used for the forecasts
+    :type keys: list[int]
     :param consumer_groups: Consumer Groups which shall be included in the forecasts. If no
         consumer group was transmitted the forecast will be executed for all consumer groups and
         values with no consumer groups
     :type consumer_groups: list[str], optional
-    :param session: The session used to access the database
-    :type session: sqlalchemy.orm.Session
     :return: A list with the results of the forecast
     :rtype: list[dict]
     """
@@ -403,28 +460,39 @@ async def forecast(
     # Check if the spatial unit is for the municipalities or the districts
     try:
         forecast_query = models.amqp.ForecastQuery(
-            granularity=spatial_unit,
             model=forecast_model,
-            objects=districts,
+            keys=keys,
             consumer_groups=consumer_groups,
         )
     except pydantic.ValidationError as e:
-        print(e.json())
-        return e.json()
+        return fastapi.responses.UJSONResponse(
+            status_code=400,
+            content={
+                "httpCode": 400,
+                "httpError": "Bad Request",
+                "error": _service_settings.name + ".FORECAST_QUERY_PARAMETER_ERROR",
+                "errorName": "Forecast Query parameter error",
+                "errorDescription": str(e.raw_errors[0].exc),
+            },
+        )
     _query_id = _amqp_client.send(
         forecast_query.json(by_alias=True), _amqp_settings.exchange
     )
-    query_wait_time_start = time.time()
-    _query_response = _amqp_client.await_response(_query_id, timeout=90)
-    query_wait_time_stop = time.time()
+    _query_response = _amqp_client.await_response(_query_id, timeout=120)
     if _query_response is None:
-        return starlette.responses.Response(status_code=412)
+        return fastapi.responses.UJSONResponse(
+            status_code=500,
+            content={
+                "httpCode": 500,
+                "httpError": "Internal Server Error",
+                "error": _service_settings.name + ".FORECAST_CALCULATION_TIMEOUT",
+                "errorName": "Forecast calculation Timeout",
+                "errorDescription": "The calculation of the forecasted data took too long",
+            },
+            headers={"Retry-After": "30"},
+        )
     return starlette.responses.Response(
         status_code=200,
-        headers={
-            "X-Forecast-Duration": str(time.time() - forecast_start),
-            "X-AMQP-WaitTime": str(query_wait_time_stop - query_wait_time_start),
-        },
         content=_query_response,
         media_type="text/json",
     )

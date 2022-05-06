@@ -67,43 +67,14 @@ class WaterUsages(BaseModel):
         return values
 
 
-class ForecastRequest(BaseModel):
-    type: enums.ForecastModel = pydantic.Field(default=..., alias="forecastType")
-    """
-    Forecast Type
-
-    The type of forecast which shall be executed
-    """
-
-    predicted_years: typing.Optional[int] = pydantic.Field(
-        default=15, alias="predictedYears"
-    )
-    """
-    Predicted Years
-
-    The amount of years which shall be predicted with the supplied model
-    """
-
-    usage_data: WaterUsages = pydantic.Field(default=..., alias="usageData")
-    """
-    Actual water usage data
-
-    This object contains the current water usages and the range of years for the current water
-    usages
-    """
-
-
 class ForecastQuery(BaseModel):
     """A model describing, how the incoming request shall look like"""
-
-    granularity: enums.SpatialUnit = pydantic.Field(default=..., alias="granularity")
-    """The level of granularity from which the object names are originating"""
 
     model: enums.ForecastModel = pydantic.Field(default=..., alias="model")
     """The forecast model which shall be used to forecast the usage values"""
 
-    objects: list[str] | list[int] = pydantic.Field(default=..., alias="objects")
-    """The names of the geo objects for which the query shall be executed"""
+    keys: list[str] = pydantic.Field(default=..., alias="keys")
+    """The municipal and district keys for which objects the forecast shall be executed"""
 
     consumer_groups: typing.Optional[list[str]] = pydantic.Field(
         default=None, alias="consumerGroups"
@@ -113,35 +84,42 @@ class ForecastQuery(BaseModel):
     forecast_size: int = pydantic.Field(default=20, alias="forecastSize", gt=0)
     """The amount of years for which the forecast shall be calculated"""
 
-    @pydantic.validator("objects")
-    def check_object_existence(cls, v, values):
-        v = sorted(v)
-        granularity = values.get("granularity")
-        if granularity == enums.SpatialUnit.DISTRICTS:
-            district_query = sql.select(
-                [database.tables.districts.c.name],
-                database.tables.districts.c.name.in_(v),
+    @pydantic.validator("keys")
+    def check_keys(cls, v):
+        """
+        Check if the keys are of a valid length and are present in the database
+
+        :param v: The values which are already present in the database
+        :return: The object containing the keys
+        """
+        if v is None:
+            raise ValueError("At least one key needs to be present in the list of keys")
+        # Split the keys into a district and a municipal list
+        municipal_keys = [k for k in v if len(k) == 8]
+        district_keys = [k for k in v if len(k) == 5]
+        unknown_keys = [k for k in v if len(k) not in [5, 8]]
+        # Now check if any unknown keys have been sent
+        if len(unknown_keys) > 0:
+            raise ValueError(
+                f"The following keys have not been recognized by the module: {unknown_keys}"
             )
-            results = database.engine.execute(district_query).all()
-            found_objects = sorted([row[0] for row in results])
-            if v != found_objects:
-                not_available_items = [i for i in v if i not in found_objects]
-                raise ValueError(
-                    f"The following districts were not found in the database: {not_available_items}"
-                )
-        elif granularity == enums.SpatialUnit.MUNICIPALITIES:
-            municipal_query = sql.select(
-                [database.tables.municipals.c.name],
-                database.tables.municipals.c.name.in_(v),
+        # Now check if the keys are present in the database
+        municipal_query = sql.select(
+            [database.tables.municipals.c.key],
+            database.tables.municipals.c.key.in_(municipal_keys),
+        )
+        db_municipals = database.engine.execute(municipal_query).all()
+        unrecognized_keys = [k for k in municipal_keys if (k,) not in db_municipals]
+        district_keys_query = sql.select(
+            [database.tables.districts.c.key],
+            database.tables.districts.c.key.in_(district_keys),
+        )
+        db_districts = database.engine.execute(district_keys_query).all()
+        unrecognized_keys += [k for k in district_keys if (k,) not in db_districts]
+        if len(unrecognized_keys) > 0:
+            raise ValueError(
+                f"The following keys have not been recognized by the module: {unrecognized_keys}"
             )
-            results = database.engine.execute(municipal_query).all()
-            found_objects = sorted([row[0] for row in results])
-            if v != found_objects:
-                not_available_items = [i for i in v if i not in found_objects]
-                raise ValueError(
-                    f"The following municipals were not found in the database:"
-                    f" {not_available_items}"
-                )
         return v
 
     @pydantic.validator("consumer_groups", always=True)
