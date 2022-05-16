@@ -42,8 +42,11 @@ _amqp_configuration = configuration.AMQPConfiguration()
 # %% Event Handlers
 @service.on_event("startup")
 def create_amqp_client():
-    global _amqp_client
+    global _amqp_client, _security_configuration
     _amqp_client = amqp_rpc_client.Client(amqp_dsn=_amqp_configuration.dsn, mute_pika=True)
+    if _security_configuration.scope_string_value is None:
+        service_scope = models.internal.ServiceScope.parse_file("./configuration/scope.json")
+        _security_configuration.scope_string_value = service_scope.value
 
 
 # %% Middlewares

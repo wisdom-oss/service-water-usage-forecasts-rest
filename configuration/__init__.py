@@ -108,8 +108,8 @@ class SecurityConfiguration(pydantic.BaseSettings):
     """
     Required Scope String Value
 
-    The scope string value of the scope which is required to access this service. If no value is set the access to
-    the services routes are unprotected
+    The scope string value of the scope which is required to access this service. If no value is set the service will
+    use the scope configured in the scope.json file
     """
 
     class Config:
