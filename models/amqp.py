@@ -1,73 +1,61 @@
 import typing
 
 import pydantic
-from pydantic import Field
 from sqlalchemy import sql
 
 import database
 import database.tables
 import enums
-from .. import BaseModel
+from . import BaseModel as _BaseModel
 
 
-class TokenIntrospectionRequest(BaseModel):
-    action: str = Field(default="validate_token", alias="action")
-
-    bearer_token: str = Field(default=..., alias="token")
-    """The bearer token which shall be validated"""
-
-    scopes: str = Field(default="water_usage:forecasts", alias="scope")
-    """The scopes the token needs to access this resource"""
-
-
-class WaterUsages(BaseModel):
-    """A model for the current water usages"""
-
-    start: int = pydantic.Field(default=..., alias="startYear")
+class TokenIntrospectionRequest(_BaseModel):
     """
-    Start Year
-
-    The data contained in the ``usages`` list start in this year
+    The data model describing how a token introspection request will look like
     """
 
-    end: int = pydantic.Field(default=..., alias="endYear")
+    action: str = pydantic.Field(default="validate_token", alias="action")
+    """The action that shall be executed on the authorization server"""
+
+    bearer_token: str = pydantic.Field(default=..., alias="token")
+    """The Bearer token that has been extracted and now shall be validated"""
+
+    scope: str = pydantic.Field(default=..., alias="scope")
+    """The scope which needs to be in the tokens scope to pass the introspection"""
+
+
+class CreateScopeRequest(_BaseModel):
     """
-    End Year
-
-    The data contained in the ``usages`` list ends in this year
+    The data model describing how a scope creation request will look like
     """
 
-    usages: list[float] = pydantic.Field(default=..., alias="usageAmounts")
-    """
-    Water Usage Amounts
+    action: str = pydantic.Field(default="add_scope")
 
-    Every entry in this list depicts the water usage of year between the ``start`` and ``end``
-    attribute of this object. The list needs to be ordered by the corresponding years
-    """
+    name: str = pydantic.Field(default=..., alias="name")
+    """The name of the new scope"""
 
-    @pydantic.root_validator
-    def check_data_consistency(cls, values):
-        """
-        Check if the data is consistent between itself. Meaning for every year is a water usage
-        amount in the list present and the values for start and end are not switched or equal
-        """
-        data_start = values.get("start")
-        data_end = values.get("end")
-        usage_values = values.get("usages")
-        if data_start == data_end:
-            raise ValueError("Unable to run successful forecast with one set of data")
-        # Calculate the number of entries needed for a complete dataset
-        needed_values = (data_end + 1) - data_start
-        # Now check if the usage list has the same length
-        if len(usage_values) != needed_values:
-            raise ValueError(
-                f"The usage values have {len(usage_values)} entries. Expected "
-                f"{needed_values} from start and end parameter"
-            )
-        return values
+    description: str = pydantic.Field(default=..., alias="description")
+    """The description of the new scope"""
+
+    value: str = pydantic.Field(default=..., alias="value")
+    """String which will identify the scope"""
+
+    @pydantic.validator("value")
+    def check_scope_value_for_whitespaces(cls, v: str):
+        if " " in v:
+            raise ValueError("The scope value may not contain any whitespaces")
+        return v
 
 
-class ForecastQuery(BaseModel):
+class CheckScopeRequest(_BaseModel):
+
+    action: str = pydantic.Field(default="check_scope", alias="action")
+
+    value: str = pydantic.Field(default=..., alias="scope")
+    """The value of the scope that shall tested for existence"""
+
+
+class CalculationRequest(_BaseModel):
     """A model describing, how the incoming request shall look like"""
 
     model: enums.ForecastModel = pydantic.Field(default=..., alias="model")
@@ -76,9 +64,7 @@ class ForecastQuery(BaseModel):
     keys: list[str] = pydantic.Field(default=..., alias="keys")
     """The municipal and district keys for which objects the forecast shall be executed"""
 
-    consumer_groups: typing.Optional[list[str]] = pydantic.Field(
-        default=None, alias="consumerGroups"
-    )
+    consumer_groups: typing.Optional[list[str]] = pydantic.Field(default=None, alias="consumerGroups")
     """The consumer groups for which the forecast shall be calculated"""
 
     forecast_size: int = pydantic.Field(default=20, alias="forecastSize", gt=0)
@@ -100,9 +86,7 @@ class ForecastQuery(BaseModel):
         unknown_keys = [k for k in v if len(k) not in [5, 8]]
         # Now check if any unknown keys have been sent
         if len(unknown_keys) > 0:
-            raise ValueError(
-                f"The following keys have not been recognized by the module: {unknown_keys}"
-            )
+            raise ValueError(f"The following keys have not been recognized by the module: {unknown_keys}")
         # Now check if the keys are present in the database
         municipal_query = sql.select(
             [database.tables.municipals.c.key],
@@ -117,17 +101,13 @@ class ForecastQuery(BaseModel):
         db_districts = database.engine.execute(district_keys_query).all()
         unrecognized_keys += [k for k in district_keys if (k,) not in db_districts]
         if len(unrecognized_keys) > 0:
-            raise ValueError(
-                f"The following keys have not been recognized by the module: {unrecognized_keys}"
-            )
+            raise ValueError(f"The following keys have not been recognized by the module: {unrecognized_keys}")
         return v
 
     @pydantic.validator("consumer_groups", always=True)
     def check_consumer_groups(cls, v):
         if v is None:
-            consumer_group_pull_query = sql.select(
-                [database.tables.consumer_groups.c.parameter]
-            )
+            consumer_group_pull_query = sql.select([database.tables.consumer_groups.c.parameter])
             results = database.engine.execute(consumer_group_pull_query).all()
             return [row[0] for row in results]
         else:
@@ -139,7 +119,5 @@ class ForecastQuery(BaseModel):
             found_objects = [row[0] for row in results]
             for obj in v:
                 if obj not in found_objects:
-                    raise ValueError(
-                        f"The consumer group {obj} was not found in the database"
-                    )
+                    raise ValueError(f"The consumer group {obj} was not found in the database")
             return v

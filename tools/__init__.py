@@ -1,19 +1,10 @@
 import asyncio
-import logging
+import datetime
 import time
 
-
-def resolve_log_level(level: str) -> int:
-    """Resolve the logging level from a string
-
-    This method will try to get the actual logging level from the logging package
-
-    If no valid logging level is supplied this method will return the info level
-
-    :param level: The name of the level which should be resolved
-    :return: The logging level which may be used in the configuration of loggers
-    """
-    return getattr(logging, level.upper(), logging.INFO)
+import pytz
+import sqlalchemy
+import tzlocal
 
 
 async def is_host_available(host: str, port: int, timeout: int = 10) -> bool:
@@ -28,9 +19,7 @@ async def is_host_available(host: str, port: int, timeout: int = 10) -> bool:
     while time.time() < _end_time:
         try:
             # Try to open a connection to the specified host and port and wait a maximum time of five seconds
-            _s_reader, _s_writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port), timeout=5
-            )
+            _s_reader, _s_writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
             # Close the stream writer again
             _s_writer.close()
             # Wait until the writer is closed
@@ -40,3 +29,17 @@ async def is_host_available(host: str, port: int, timeout: int = 10) -> bool:
             # Since the connection could not be opened wait 5 seconds before trying again
             await asyncio.sleep(5)
     return False
+
+
+def get_last_schema_update(schema_name: str, engine: sqlalchemy.engine.Engine) -> datetime.datetime:
+    query = (
+        f"SELECT timestamp "
+        f"FROM public.audit "
+        f"WHERE schema_name = '{schema_name}' "
+        f"ORDER BY timestamp DESC "
+        f"LIMIT 1"
+    )
+    result = engine.execute(query).first()
+    if result is None:
+        return datetime.datetime.now(tz=tzlocal.get_localzone())
+    return datetime.datetime.fromtimestamp(result[0], tz=tzlocal.get_localzone())
