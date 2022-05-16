@@ -1,0 +1,5 @@
+{
+  "name": "Water Usage Forecasts",
+  "description": "The scope allows users to run water usage forecasts with the data present in the database",
+  "scopeStringValue": "water-usage:forecasts"
+}
