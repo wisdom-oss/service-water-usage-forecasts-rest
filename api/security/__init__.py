@@ -4,13 +4,12 @@ import typing
 
 import amqp_rpc_client
 import fastapi.security
-import pydantic
-import ujson
 
+import configuration
 import enums
 import exceptions
+import models.amqp
 import models.internal
-import configuration
 
 # %% OAuth 2.0 Scheme Setup
 __wisdom_central_auth = fastapi.security.OAuth2PasswordBearer(
@@ -25,7 +24,7 @@ _amqp_settings = configuration.AMQPConfiguration()
 
 
 # %% Clients needed for the security
-__amqp_client = amqp_rpc_client.Client(_amqp_settings.dsn, mute_pika=True, data_processing_wait_time=1)
+__amqp_client = amqp_rpc_client.Client(_amqp_settings.dsn)
 __logger = logging.getLogger("security")
 
 
@@ -46,19 +45,20 @@ def is_authorized_user(
     :rtype: bool
     :raises exceptions.APIException: The user is not authorized to access this service
     """
+    if access_token is None:
+        raise exceptions.APIException(
+            error_code="INVALID_TOKEN",
+            error_title="Invalid Bearer Token",
+            error_description="The request did not contain the any credentials to allow processing this request",
+            http_status=http.HTTPStatus.BAD_REQUEST,
+        )
     # Prepare the request
-    introspection_request = {
-        "action": enums.AMQPAction.CHECK_TOKEN_SCOPE.value,
-        "token": access_token,
-        "scopes": scopes.scopes,
-    }
+    introspection_request = models.amqp.TokenIntrospectionRequest(bearer_token=access_token, scope=scopes.scope_str)
     # Send the request and wait a max amount of 10 seconds until the response needs to be returned
-    logging.debug("Created token introspection request: %s", introspection_request)
-    introspection_id = __amqp_client.send(ujson.dumps(introspection_request), _amqp_settings.authorization_exchange)
-    logging.debug("Sent token introspection request. Got new ID: %s", introspection_id)
-    logging.debug("Waiting for introspection response")
+    introspection_id = __amqp_client.send(
+        introspection_request.json(by_alias=True), _amqp_settings.authorization_exchange
+    )
     introspection_response_bytes = __amqp_client.await_response(introspection_id, 10)
-    logging.debug("Got response for token introspection: %s", introspection_response_bytes)
     if introspection_response_bytes is None:
         raise exceptions.APIException(
             error_code="TOKEN_VALIDATION_TIMEOUT",
@@ -67,15 +67,7 @@ def is_authorized_user(
             http_status=http.HTTPStatus.REQUEST_TIMEOUT,
         )
     # Try to read the response
-    try:
-        token = models.internal.TokenIntrospection.parse_raw(introspection_response_bytes)
-        logging.debug("Successfully parsed the token introspection response into an object: %s", token)
-    except pydantic.ValidationError as e:
-        raise exceptions.APIException(
-            error_code="INTROSPECTION_FAILURE",
-            error_title="Token introspection failure",
-            error_description=f"The token introspection failed due to an unrecognized response: {str(e)}",
-        )
+    token = models.internal.TokenIntrospection.parse_raw(introspection_response_bytes)
     if not token.active:
         if token.reason == enums.TokenIntrospectionFailure.INVALID_TOKEN:
             raise exceptions.APIException(
