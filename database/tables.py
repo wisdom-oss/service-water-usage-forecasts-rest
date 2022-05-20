@@ -1,4 +1,5 @@
 import sqlalchemy
+import sqlalchemy.dialects
 
 import database
 
@@ -9,9 +10,9 @@ usages = sqlalchemy.Table(
     "usages",
     water_usage_meta_data,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True),
-    sqlalchemy.Column("municipal", None, sqlalchemy.ForeignKey("geodata.nds_municipalities.id")),
-    sqlalchemy.Column("consumer", None, sqlalchemy.ForeignKey("consumers.id")),
-    sqlalchemy.Column("consumer_group", None, sqlalchemy.ForeignKey("consumer_group.id")),
+    sqlalchemy.Column("shape", sqlalchemy.Integer, sqlalchemy.ForeignKey("geodata.shape.id")),
+    sqlalchemy.Column("consumer", sqlalchemy.dialects.postgresql.UUID, sqlalchemy.ForeignKey("consumers.id")),
+    sqlalchemy.Column("consumer_group", sqlalchemy.Integer, sqlalchemy.ForeignKey("consumer_group.id")),
     sqlalchemy.Column("year", sqlalchemy.Integer),
     sqlalchemy.Column("value", sqlalchemy.Numeric),
 )
@@ -25,20 +26,13 @@ consumer_groups = sqlalchemy.Table(
     sqlalchemy.Column("parameter", sqlalchemy.Text),
 )
 
-municipals = sqlalchemy.Table(
-    "nds_municipalities",
+shapes = sqlalchemy.Table(
+    "shapes",
     geodata_meta_data,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True),
     sqlalchemy.Column("name", sqlalchemy.Text),
     sqlalchemy.Column("key", sqlalchemy.Text),
-)
-
-districts = sqlalchemy.Table(
-    "nds_districts",
-    geodata_meta_data,
-    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True),
-    sqlalchemy.Column("name", sqlalchemy.Text),
-    sqlalchemy.Column("key", sqlalchemy.Text),
+    sqlalchemy.Column("nuts_key", sqlalchemy.Text),
 )
 
 

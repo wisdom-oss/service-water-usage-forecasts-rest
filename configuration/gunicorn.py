@@ -16,7 +16,7 @@ import models.amqp
 import tools
 
 bind = f"0.0.0.0:{configuration.ServiceConfiguration().http_port}"
-workers = multiprocessing.cpu_count() * 2 + 1
+workers = 1
 limit_request_line = 0
 limit_request_fields = 0
 limit_request_field_size = 0

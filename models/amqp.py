@@ -80,26 +80,13 @@ class CalculationRequest(_BaseModel):
         """
         if v is None:
             raise ValueError("At least one key needs to be present in the list of keys")
-        # Split the keys into a district and a municipal list
-        municipal_keys = [k for k in v if len(k) == 8]
-        district_keys = [k for k in v if len(k) == 5]
-        unknown_keys = [k for k in v if len(k) not in [5, 8]]
-        # Now check if any unknown keys have been sent
-        if len(unknown_keys) > 0:
-            raise ValueError(f"The following keys have not been recognized by the module: {unknown_keys}")
         # Now check if the keys are present in the database
-        municipal_query = sql.select(
-            [database.tables.municipals.c.key],
-            database.tables.municipals.c.key.in_(municipal_keys),
+        shape_query = sql.select(
+            [database.tables.shapes.c.key],
+            database.tables.shapes.c.key.in_(v),
         )
-        db_municipals = database.engine.execute(municipal_query).all()
-        unrecognized_keys = [k for k in municipal_keys if (k,) not in db_municipals]
-        district_keys_query = sql.select(
-            [database.tables.districts.c.key],
-            database.tables.districts.c.key.in_(district_keys),
-        )
-        db_districts = database.engine.execute(district_keys_query).all()
-        unrecognized_keys += [k for k in district_keys if (k,) not in db_districts]
+        db_shapes = database.engine.execute(shape_query).all()
+        unrecognized_keys = [k for k in v if (k,) not in db_shapes]
         if len(unrecognized_keys) > 0:
             raise ValueError(f"The following keys have not been recognized by the module: {unrecognized_keys}")
         return v
