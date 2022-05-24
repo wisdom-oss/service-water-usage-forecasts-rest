@@ -8,12 +8,11 @@ import typing
 
 import amqp_rpc_client
 import fastapi
-import py_eureka_client.eureka_client
 import pydantic
 import pytz as pytz
+import redis
 import sqlalchemy.exc
 import ujson
-import redis
 
 import api.handler
 import configuration
@@ -57,7 +56,6 @@ def create_amqp_client():
     if _security_configuration.scope_string_value is None:
         service_scope = models.internal.ServiceScope.parse_file("./configuration/scope.json")
         _security_configuration.scope_string_value = service_scope.value
-    print(_redis_configuration.json(indent=2))
     if _redis_configuration.use_redis:
         _redis_client = redis.Redis.from_url(_redis_configuration.dsn)
 
