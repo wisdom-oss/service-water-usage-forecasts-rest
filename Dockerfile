@@ -7,7 +7,6 @@ ENV CONFIG_HTTP_PORT=5000
 EXPOSE $CONFIG_HTTP_PORT
 WORKDIR /service
 COPY . /service
-RUN apt-get update && apt-get install -y git
 RUN python -m pip install -r /service/requirements.txt
 RUN python -m pip install gunicorn
 RUN python -m pip install uvicorn[standard]

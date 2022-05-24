@@ -13,6 +13,7 @@ import pydantic
 import pytz as pytz
 import sqlalchemy.exc
 import ujson
+import redis
 
 import api.handler
 import configuration
@@ -26,27 +27,39 @@ from . import security
 
 # %% Global Clients
 _amqp_client: typing.Optional[amqp_rpc_client.Client] = None
-_service_registry_client: typing.Optional[py_eureka_client.eureka_client.EurekaClient] = None
+_redis_client: typing.Union[None, redis.Redis] = None
 
 # %% API Setup
 service = fastapi.FastAPI()
 service.add_exception_handler(exceptions.APIException, api.handler.handle_api_error)
-service.add_exception_handler(fastapi.exceptions.RequestValidationError, api.handler.handle_request_validation_error)
+service.add_exception_handler(
+    fastapi.exceptions.RequestValidationError,
+    api.handler.handle_request_validation_error,
+)
 service.add_exception_handler(sqlalchemy.exc.IntegrityError, api.handler.handle_integrity_error)
 
 # %% Configurations
 _security_configuration = configuration.SecurityConfiguration()
 _amqp_configuration = configuration.AMQPConfiguration()
+_redis_configuration = configuration.RedisConfiguration()
+
+# %% Mappings for responses
+__forecast_request_user: typing.Dict[str, models.internal.UserAccount] = {}
+__awaiting_forecasts = []
+__received_responses: typing.Dict[str, bytes] = {}
 
 
 # %% Event Handlers
 @service.on_event("startup")
 def create_amqp_client():
-    global _amqp_client, _security_configuration
+    global _amqp_client, _security_configuration, _redis_client
     _amqp_client = amqp_rpc_client.Client(amqp_dsn=_amqp_configuration.dsn, mute_pika=True)
     if _security_configuration.scope_string_value is None:
         service_scope = models.internal.ServiceScope.parse_file("./configuration/scope.json")
         _security_configuration.scope_string_value = service_scope.value
+    print(_redis_configuration.json(indent=2))
+    if _redis_configuration.use_redis:
+        _redis_client = redis.Redis.from_url(_redis_configuration.dsn)
 
 
 # %% Middlewares
@@ -69,7 +82,6 @@ async def etag_comparison(request: fastapi.Request, call_next):
     path = request.url.path
     query_parameter = dict(request.query_params)
     content_type = request.headers.get("Content-Type", "text/plain")
-
     if content_type == "application/json":
         try:
             body = ujson.loads(await request.body())
@@ -138,10 +150,82 @@ async def forecast(
     logging.info("Awaiting the response for the forecast")
     _forecast = _amqp_client.await_response(_forecast_id, timeout=120.0)
     if _forecast is None:
-        raise exceptions.APIException(
-            error_code="FORECAST_CALCULATION_TIMEOUT",
-            error_title="Forecast calculation timeout",
-            error_description="The calculation module did not send a response in the last two minutes",
-            http_status=http.HTTPStatus.REQUEST_TIMEOUT,
+
+        logging.warning(
+            "Got no response in the last 120.0 seconds. Returning the forecast id to allow pull of result "
+            "when the result was received"
         )
-    return fastapi.Response(content=_forecast, media_type="text/json", headers={"X-Forecast-ID": _forecast_id})
+        if _redis_configuration.use_redis:
+            _redis_client.lpush("water_usage_forecasts_awaiting", _forecast_id)
+            _redis_client.set(f"forecast_user_{_forecast_id}", user.json(by_alias=True))
+            message = {
+                "forecastID": _forecast_id,
+                "message": "The forecast calculation module did not return a response "
+                "in the last two minutes. Use the forecast id to try and pull the "
+                "response later on. If the result pull results in a 404 please ",
+            }
+            return fastapi.responses.UJSONResponse(
+                content=message,
+                media_type="text/json",
+                status_code=http.HTTPStatus.ACCEPTED,
+            )
+        else:
+            raise exceptions.APIException(
+                error_code="FORECAST_CALCULATION_TIMEOUT",
+                error_title="Forecast calculation timeout",
+                error_description="The calculation module did not send a response in the last two minutes",
+                http_status=http.HTTPStatus.GATEWAY_TIMEOUT,
+            )
+    return fastapi.Response(
+        content=_forecast,
+        media_type="text/json",
+        headers={"X-Forecast-ID": _forecast_id},
+    )
+
+
+if _redis_configuration.use_redis:
+
+    @service.get("/result/{forecast_id}")
+    async def get_forecast_result(
+        forecast_id: str = fastapi.Path(default=...),
+        user: models.internal.UserAccount = fastapi.Security(
+            security.is_authorized_user, scopes=[_security_configuration.scope_string_value]
+        ),
+    ):
+        # Get all awaited forecasts
+        awaited_forecasts = [e.decode("utf-8") for e in _redis_client.lrange("water_usage_forecasts_awaiting", 0, -1)]
+        if forecast_id not in awaited_forecasts:
+            raise exceptions.APIException(
+                error_code="NO_SUCH_FORECAST",
+                error_title="Forecast not found",
+                error_description="The specified forecast was not found in the list of awaited forecasts",
+                http_status=http.HTTPStatus.NOT_FOUND,
+            )
+        _raw_forecast_user = _redis_client.get(f"forecast_user_{forecast_id}")
+        if _raw_forecast_user is not None:
+            _forecast_user = models.internal.UserAccount.parse_raw(_raw_forecast_user)
+            if _forecast_user.id is not user.id:
+                raise exceptions.APIException(
+                    error_code="NOT_FORECAST_USER",
+                    error_title="Forecast created by different user",
+                    error_description="The forecast was created by a different user. Therefore you may not access this "
+                    "forecast",
+                    http_status=http.HTTPStatus.FORBIDDEN,
+                )
+        if _redis_client.get(f"forecast_result_{forecast_id}") is None:
+            _forecast_result = _amqp_client.get_response(forecast_id)
+            if _forecast_result is None:
+                message = {
+                    "forecastID": forecast_id,
+                    "message": "There is no response to the requested forecast at the time",
+                }
+                return fastapi.responses.UJSONResponse(
+                    content=message,
+                    media_type="text/json",
+                    status_code=http.HTTPStatus.TOO_EARLY,
+                )
+            else:
+                _redis_client.set(f"forecast_result_{forecast_id}", _forecast_result)
+        else:
+            _forecast_result = _redis_client.get(f"forecast_result_{forecast_id}")
+        return fastapi.Response(content=_forecast_result, media_type="text/json")
