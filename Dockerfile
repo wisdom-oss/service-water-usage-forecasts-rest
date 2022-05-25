@@ -2,7 +2,7 @@ FROM python:3.9-slim
 LABEL vendor="WISdoM 2.0 Project Group"
 LABEL maintainer="wisdom@uol.de"
 # Do not change this variable. Use the environment variables in docker compose or while starting to modify this value
-ENV CONFIG_SERVICE_NAME="water-usage-forecasts-test"
+ENV CONFIG_SERVICE_NAME="water-usage-forecasts"
 ENV CONFIG_HTTP_PORT=5000
 EXPOSE $CONFIG_HTTP_PORT
 WORKDIR /service
