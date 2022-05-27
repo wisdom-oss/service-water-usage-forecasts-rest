@@ -124,8 +124,6 @@ def on_starting(server):
                 )
                 sys.exit(3)
             logging.info("Successfully created the scope that shall be used by this service")
-        # Set the value for the used security scope internally
-        os.environ["CONFIG_SECURITY_SCOPE"] = service_scope.value
     except Exception as e:
         logging.critical("Unable to parse the service scope configuration", exc_info=e)
     del _amqp_client

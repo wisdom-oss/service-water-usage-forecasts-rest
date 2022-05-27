@@ -2,6 +2,13 @@ import typing
 
 import pydantic
 
+import models.internal
+
+
+def get_scope_string_value():
+    service_scope = models.internal.ServiceScope.parse_file("./configuration/scope.json")
+    return service_scope.value
+
 
 class ServiceConfiguration(pydantic.BaseSettings):
 
@@ -99,7 +106,7 @@ class AMQPConfiguration(pydantic.BaseSettings):
 class SecurityConfiguration(pydantic.BaseSettings):
 
     scope_string_value: typing.Optional[str] = pydantic.Field(
-        default=None,
+        default_factory=get_scope_string_value,
         title="Required Scope String value",
         description="The scope string value of the scope which is required to access the service",
         env="CONFIG_SECURITY_SCOPE",
