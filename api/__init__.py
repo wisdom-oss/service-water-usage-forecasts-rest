@@ -143,7 +143,9 @@ async def forecast(
             error_description=f"The forecast parameters contained errors: {str(e)}",
         )
     logging.info("Sending calculation request to the calculation service")
-    _forecast_id = _amqp_client.send(calculation_request.json(by_alias=True), _amqp_configuration.exchange)
+    _forecast_id = _amqp_client.send(
+        calculation_request.json(by_alias=True), _amqp_configuration.exchange, "forecast-requests"
+    )
     # Wait a maximum amount of 120 seconds for the response
     logging.info("Awaiting the response for the forecast")
     _forecast = _amqp_client.await_response(_forecast_id, timeout=120.0)
