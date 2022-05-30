@@ -56,7 +56,7 @@ def is_authorized_user(
     introspection_request = models.amqp.TokenIntrospectionRequest(bearer_token=access_token, scope=scopes.scope_str)
     # Send the request and wait a max amount of 10 seconds until the response needs to be returned
     introspection_id = __amqp_client.send(
-        introspection_request.json(by_alias=True), _amqp_settings.authorization_exchange
+        introspection_request.json(by_alias=True), _amqp_settings.authorization_exchange, "authorization-service"
     )
     introspection_response_bytes = __amqp_client.await_response(introspection_id, 10)
     if introspection_response_bytes is None:
