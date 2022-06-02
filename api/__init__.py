@@ -164,7 +164,7 @@ async def forecast(
                 "in the last two minutes. Use the forecast id to try and pull the "
                 "response later on. If the result pull results in a 404 please ",
             }
-            return fastapi.responses.UJSONResponse(
+            return fastapi.responses.ORJSONResponse(
                 content=message,
                 media_type="text/json",
                 status_code=http.HTTPStatus.ACCEPTED,
@@ -219,7 +219,7 @@ if _redis_configuration.use_redis:
                     "forecastID": forecast_id,
                     "message": "There is no response to the requested forecast at the time",
                 }
-                return fastapi.responses.UJSONResponse(
+                return fastapi.responses.ORJSONResponse(
                     content=message,
                     media_type="text/json",
                     status_code=http.HTTPStatus.TOO_EARLY,

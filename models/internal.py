@@ -7,7 +7,6 @@ from . import BaseModel as __BaseModel
 
 
 class ServiceScope(__BaseModel):
-
     name: str = pydantic.Field(default=..., alias="name")
     """The name of the scope this service uses"""
 
@@ -33,7 +32,6 @@ class UserAccount(__BaseModel):
 
 
 class TokenIntrospection(__BaseModel):
-
     active: bool = pydantic.Field(default=...)
 
     reason: typing.Optional[enums.TokenIntrospectionFailure] = pydantic.Field(default=None)

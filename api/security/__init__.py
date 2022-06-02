@@ -22,7 +22,6 @@ __wisdom_central_auth = fastapi.security.OAuth2PasswordBearer(
 _service_settings = configuration.ServiceConfiguration()
 _amqp_settings = configuration.AMQPConfiguration()
 
-
 # %% Clients needed for the security
 __amqp_client = amqp_rpc_client.Client(_amqp_settings.dsn)
 __logger = logging.getLogger("security")

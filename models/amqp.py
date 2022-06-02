@@ -48,7 +48,6 @@ class CreateScopeRequest(_BaseModel):
 
 
 class CheckScopeRequest(_BaseModel):
-
     action: str = pydantic.Field(default="check_scope", alias="action")
 
     value: str = pydantic.Field(default=..., alias="scope")

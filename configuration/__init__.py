@@ -11,7 +11,6 @@ def get_scope_string_value():
 
 
 class ServiceConfiguration(pydantic.BaseSettings):
-
     name: str = pydantic.Field(
         default=...,
         title="Microservice Name",
@@ -59,7 +58,6 @@ class ServiceConfiguration(pydantic.BaseSettings):
 
 
 class AMQPConfiguration(pydantic.BaseSettings):
-
     dsn: pydantic.AmqpDsn = pydantic.Field(
         default=...,
         title="AMQP Data Source Name",
@@ -104,7 +102,6 @@ class AMQPConfiguration(pydantic.BaseSettings):
 
 
 class SecurityConfiguration(pydantic.BaseSettings):
-
     scope_string_value: typing.Optional[str] = pydantic.Field(
         default_factory=get_scope_string_value,
         title="Required Scope String value",
@@ -159,7 +156,6 @@ class DatabaseConfiguration(pydantic.BaseSettings):
 
 
 class RedisConfiguration(pydantic.BaseSettings):
-
     dsn: pydantic.RedisDsn = pydantic.Field(default=None, alias="CONFIG_REDIS_DSN", env="CONFIG_REDIS_DSN")
     """
     Redis DSN
