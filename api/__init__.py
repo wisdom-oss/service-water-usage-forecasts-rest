@@ -12,7 +12,7 @@ import pydantic
 import pytz as pytz
 import redis
 import sqlalchemy.exc
-import ujson
+import orjson
 
 import api.handler
 import configuration
@@ -82,7 +82,7 @@ async def etag_comparison(request: fastapi.Request, call_next):
     content_type = request.headers.get("Content-Type", "text/plain")
     if content_type == "application/json":
         try:
-            body = ujson.loads(await request.body())
+            body = orjson.loads(await request.body())
         except ValueError as error:
             body = (await request.body()).decode("utf-8")
     else:
@@ -99,9 +99,9 @@ async def etag_comparison(request: fastapi.Request, call_next):
         "request_query_parameter": query_parameter,
         "request_body": body,
     }
-    query_data = ujson.dumps(query_dict, ensure_ascii=False, sort_keys=True)
+    query_data = orjson.dumps(query_dict, option=orjson.OPT_SORT_KEYS)
     # Now create a hashsum of the query data
-    query_hash = hashlib.sha3_256(query_data.encode("utf-8")).hexdigest()
+    query_hash = hashlib.sha3_256(query_data).hexdigest()
     # Now access the headers of the request and check for the If-None-Match Header
     if_none_match_value = request.headers.get("If-None-Match", "")
     if_modified_since_value = request.headers.get("If-Modified-Since")
