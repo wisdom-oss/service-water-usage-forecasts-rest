@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.10-slim
 LABEL vendor="WISdoM 2.0 Project Group"
 LABEL maintainer="wisdom@uol.de"
 # Do not change this variable. Use the environment variables in docker compose or while starting to modify this value
