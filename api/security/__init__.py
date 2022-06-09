@@ -63,7 +63,7 @@ def is_authorized_user(
             error_code="TOKEN_VALIDATION_TIMEOUT",
             error_title="Token Validation Timeout",
             error_description="The service could not validate the used access token in a timely manner",
-            http_status=http.HTTPStatus.GATEWAY_TIMEOUT,
+            http_status=http.HTTPStatus.BAD_GATEWAY,
         )
     # Try to read the response
     token = models.internal.TokenIntrospection.parse_raw(introspection_response_bytes)
