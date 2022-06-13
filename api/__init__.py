@@ -124,6 +124,7 @@ async def etag_comparison(request: fastapi.Request, call_next):
                     "E-Tag": query_hash,
                     "Last-Modified": email.utils.format_datetime(last_database_modification),
                     "X-Delivered-By": "Calculation Module",
+                    "X-Reason": "Database Content Changed",
                 },
                 media_type="text/json",
             )
@@ -142,11 +143,16 @@ async def etag_comparison(request: fastapi.Request, call_next):
                     "E-Tag": query_hash,
                     "Last-Modified": email.utils.format_datetime(last_database_modification),
                     "X-Delivered-By": "Calculation Module",
+                    "X-Reason": "No response in Redis",
                 },
                 media_type="text/json",
             )
         return response
     else:
+        # Authorize the user before sending the response
+        user: models.internal.UserAccount = fastapi.Security(
+            security.is_authorized_user, scopes=[_security_configuration.scope_string_value]
+        )
         return fastapi.Response(
             content=_redis_client.get(response_cache_key),
             headers={

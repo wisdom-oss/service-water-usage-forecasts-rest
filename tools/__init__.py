@@ -35,4 +35,4 @@ def get_last_schema_update(schema_name: str, engine: sqlalchemy.engine.Engine) -
     result = engine.execute(query).first()
     if result is None:
         return datetime.datetime.now(tz=tzlocal.get_localzone())
-    return datetime.datetime.fromtimestamp(result[0], tz=tzlocal.get_localzone())
+    return datetime.datetime.fromtimestamp(round(result[0]), tz=tzlocal.get_localzone())
