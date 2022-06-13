@@ -120,7 +120,11 @@ async def etag_comparison(request: fastapi.Request, call_next):
             response.headers.append("Last-Modified", email.utils.format_datetime(last_database_modification))
             return fastapi.Response(
                 content=response_content,
-                headers={"E-Tag": query_hash, "Last-Modified": email.utils.format_datetime(last_database_modification)},
+                headers={
+                    "E-Tag": query_hash,
+                    "Last-Modified": email.utils.format_datetime(last_database_modification),
+                    "X-Delivered-By": "Calculation Module",
+                },
                 media_type="text/json",
             )
         return response
@@ -134,14 +138,22 @@ async def etag_comparison(request: fastapi.Request, call_next):
             response.headers.append("Last-Modified", email.utils.format_datetime(last_database_modification))
             return fastapi.Response(
                 content=response_content,
-                headers={"E-Tag": query_hash, "Last-Modified": email.utils.format_datetime(last_database_modification)},
+                headers={
+                    "E-Tag": query_hash,
+                    "Last-Modified": email.utils.format_datetime(last_database_modification),
+                    "X-Delivered-By": "Calculation Module",
+                },
                 media_type="text/json",
             )
         return response
     else:
         return fastapi.Response(
             content=_redis_client.get(response_cache_key),
-            headers={"E-Tag": query_hash, "Last-Modified": email.utils.format_datetime(last_database_modification)},
+            headers={
+                "E-Tag": query_hash,
+                "Last-Modified": email.utils.format_datetime(last_database_modification),
+                "X-Delivered-By": "Redis",
+            },
             media_type="text/json",
         )
 
