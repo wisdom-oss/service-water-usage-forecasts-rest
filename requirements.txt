@@ -7,7 +7,7 @@ FastAPI~=0.78.0
 py-eureka-client~=0.10.5
 python-multipart
 uvicorn~=0.17.6
-amqp-rpc-client~=1.2.6a1
+amqp-rpc-client~=1.2.6a2
 pytz~=2022.1
 redis~=4.3.1
 orjson
