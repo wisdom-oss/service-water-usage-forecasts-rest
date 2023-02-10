@@ -5,6 +5,7 @@ go 1.19
 require github.com/sirupsen/logrus v1.9.0
 
 require (
+	github.com/gchaincl/dotsql v1.0.0
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/lib/pq v1.10.6
 	github.com/wisdom-oss/golang-kong-access v0.2.2
