@@ -4,7 +4,7 @@ package vars
 
 import (
 	"database/sql"
-
+	"github.com/gchaincl/dotsql"
 	"microservice/structs"
 )
 
@@ -44,6 +44,9 @@ var (
 
 	// APIGatewayPort contains the port on which the admin api of the Kong API Gateway listens
 	APIGatewayPort int = 8001
+
+	// QueryFilePath specifies from where the prepared queries shall be loaded from
+	QueryFilePath string = "/res/queries.sql"
 )
 
 // ===== Globally used variables =====
@@ -57,3 +60,6 @@ var ScopeConfiguration *structs.ScopeInformation
 // ExecuteHealthcheck is an indicator for the microservice if the service shall execute a healthcheck.
 // You can trigger a health check by starting the executable with -healthcheck
 var ExecuteHealthcheck bool
+
+// SqlQueries contains the queries loaded into the service from the queries.sql file
+var SqlQueries *dotsql.DotSql
