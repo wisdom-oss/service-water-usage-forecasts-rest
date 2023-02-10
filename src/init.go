@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/gchaincl/dotsql"
 	"os"
 	"strconv"
 	"strings"
@@ -41,6 +42,7 @@ var OptionalIntSettings = map[string]*int{
 // value. If the value is not found a default value will be loaded
 var OptionalStringSettings = map[string]*string{
 	"SCOPE_FILE_LOCATION": &vars.ScopeConfigurationPath,
+	"QUERY_FILE_LOCATION": &vars.QueryFilePath,
 }
 
 /*
@@ -229,6 +231,12 @@ func init() {
 	parserError := json.Unmarshal(fileContents, &vars.ScopeConfiguration)
 	if parserError != nil {
 		logger.WithError(parserError).Fatalf("Unable to parse the contents of '%s'", vars.ScopeConfigurationPath)
+	}
+
+	// now load the prepared sql queries
+	vars.SqlQueries, err = dotsql.LoadFromFile(vars.QueryFilePath)
+	if err != nil {
+		logger.WithError(err).Fatal("unable to load the prepared sql queries from the query file")
 	}
 }
 
