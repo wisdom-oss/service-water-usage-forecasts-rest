@@ -9,6 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/lib/pq v1.10.6
 	github.com/wisdom-oss/golang-kong-access v0.2.2
+	github.com/go-chi/httplog v0.2.5
 )
 
 require golang.org/x/sys v0.0.0-20221006211917-84dc82d7e875 // indirect
