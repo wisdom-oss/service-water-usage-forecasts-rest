@@ -5,6 +5,7 @@ package vars
 import (
 	"database/sql"
 	"github.com/gchaincl/dotsql"
+	"github.com/rs/zerolog"
 	"microservice/structs"
 )
 
@@ -57,9 +58,8 @@ var PostgresConnection *sql.DB
 // ScopeConfiguration containing the information about the scope needed to access this service
 var ScopeConfiguration *structs.ScopeInformation
 
-// ExecuteHealthcheck is an indicator for the microservice if the service shall execute a healthcheck.
-// You can trigger a health check by starting the executable with -healthcheck
-var ExecuteHealthcheck bool
+// HttpLogger stores the central logger for the request handlers
+var HttpLogger zerolog.Logger
 
 // SqlQueries contains the queries loaded into the service from the queries.sql file
 var SqlQueries *dotsql.DotSql

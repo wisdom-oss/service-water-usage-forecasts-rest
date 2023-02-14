@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httplog"
 	gateway "github.com/wisdom-oss/golang-kong-access"
 	middleware2 "microservice/request/middleware"
 	"microservice/request/routes"
@@ -23,26 +24,20 @@ import (
 This function is used to set up the http server for the microservice
 */
 func main() {
-	if vars.ExecuteHealthcheck {
-		healthcheckUrl := fmt.Sprintf("http://localhost:%d/ping", vars.ListenPort)
-		response, err := http.Get(healthcheckUrl)
-		if err != nil {
-			os.Exit(1)
-		}
-		if response.StatusCode != 204 {
-			os.Exit(1)
-		}
-		return
-	}
-
+	vars.HttpLogger = httplog.NewLogger("water-usage-rest", httplog.Options{
+		JSON:     true,
+		LogLevel: "warn",
+	})
 	// Set up the routing of the different functions
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
-	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+	router.Use(httplog.RequestLogger(vars.HttpLogger))
 	router.Use(middleware2.AuthorizationCheck)
 	router.Use(middleware2.AdditionalResponseHeaders)
-	router.HandleFunc("/", routes.BasicHandler)
+	router.Use(middleware2.ParseQueryParametersToContext)
+	router.HandleFunc("/{forecastMethod}", routes.ForecastRequest)
 	router.HandleFunc("/healthcheck", routes.HealthCheck)
 
 	// Configure the HTTP server
