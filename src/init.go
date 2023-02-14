@@ -5,7 +5,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"github.com/gchaincl/dotsql"
 	"os"
@@ -43,23 +42,6 @@ var OptionalIntSettings = map[string]*int{
 var OptionalStringSettings = map[string]*string{
 	"SCOPE_FILE_LOCATION": &vars.ScopeConfigurationPath,
 	"QUERY_FILE_LOCATION": &vars.QueryFilePath,
-}
-
-/*
-Initialization Step 1 - Flag Creation
-
-This initialization step will create a boolean flag which may trigger a healthcheck later on
-*/
-func init() {
-	// Create a new boolean variable flag which uses an existing variable pointer for the value to be assigned
-	flag.BoolVar(
-		&vars.ExecuteHealthcheck,
-		"healthcheck",
-		false,
-		"Run a healthcheck of the service which will check if the service can call itself and is correctly setup on the API gateway",
-	)
-	// Parse the created flags into their variables
-	flag.Parse()
 }
 
 /*
