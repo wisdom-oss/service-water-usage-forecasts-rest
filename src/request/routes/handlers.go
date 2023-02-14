@@ -88,4 +88,65 @@ func ForecastRequest(responseWriter http.ResponseWriter, request *http.Request) 
 	}
 
 	// since all municipality keys passed the check, the consumer groups will now be checked if they are supplied
+	ctxRequestedConsumerGroups := requestContext.Value("consumerGroup")
+
+	// check if any consumer groups have been set
+	var requestedConsumerGroups []string
+	if ctxRequestedConsumerGroups == nil {
+		vars.HttpLogger.Warn().Msg("no consumer group filter set. prognosis calculation may take more time")
+		// since the request did not contain any consumer groups, every consumer group will be used
+		consumerGroupRows, queryError := vars.SqlQueries.Query(vars.PostgresConnection, "get-consumer-groups")
+		if queryError != nil {
+			requestErrors.RespondWithInternalError(queryError, responseWriter)
+			return
+		}
+
+		// now iterate through the returned rows and collect the consumer groups
+		for consumerGroupRows.Next() {
+			var consumerGroup string
+			scanError := consumerGroupRows.Scan(&consumerGroup)
+			if scanError != nil {
+				requestErrors.RespondWithInternalError(scanError, responseWriter)
+				return
+			}
+			requestedConsumerGroups = append(requestedConsumerGroups, consumerGroup)
+		}
+
+	} else {
+		// convert the requested consumer groups into a string array
+		requestedConsumerGroups = ctxRequestedConsumerGroups.([]string)
+		knownConsumerGroupRows, queryError := vars.SqlQueries.Query(vars.PostgresConnection, "check-consumer-groups",
+			pq.Array(requestedConsumerGroups))
+		if queryError != nil {
+			requestErrors.RespondWithInternalError(queryError, responseWriter)
+			return
+		}
+		// now collect the returned consumer groups
+		var knownConsumerGroups []string
+		for knownConsumerGroupRows.Next() {
+			var consumerGroup string
+			scanError := knownConsumerGroupRows.Scan(&consumerGroup)
+			if scanError != nil {
+				requestErrors.RespondWithInternalError(scanError, responseWriter)
+				return
+			}
+
+			knownConsumerGroups = append(knownConsumerGroups, consumerGroup)
+		}
+
+		// now check if every requested consumer group is found in the database
+		for _, requestedConsumerGroup := range requestedConsumerGroups {
+			if !utils.ArrayContains(knownConsumerGroups, requestedConsumerGroup) {
+				// since the consumer group was not found in the database, the request is rejected
+				requestError, err := requestErrors.BuildRequestError(requestErrors.InvalidConsumerGroup)
+				if err != nil {
+					requestErrors.RespondWithInternalError(err, responseWriter)
+					return
+				}
+				requestErrors.RespondWithRequestError(requestError, responseWriter)
+				return
+			}
+		}
+	}
+
 }
