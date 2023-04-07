@@ -29,9 +29,7 @@ func main() {
 	router.Use(middleware.Heartbeat("/healthcheck"))
 	router.Use(wisdomMiddleware.GatewayConfigInterceptor(globals.Environment["GATEWAY_CONFIG_LOCATION"], "/_gatewayConfig"))
 	router.Use(wisdomMiddleware.Authorization([]string{"/healthcheck", "/_gatewayConfig"}, globals.ScopeConfiguration.ScopeValue))
-	//router.Use()
-	router.HandleFunc("/", routes.BasicHandler)
-	router.HandleFunc("/_gatewayConfig", routes.GatewayConfig)
+	router.HandleFunc("/{model}", routes.BasicHandler)
 
 	// Configure the HTTP server
 	server := &http.Server{
