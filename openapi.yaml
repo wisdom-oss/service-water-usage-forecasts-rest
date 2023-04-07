@@ -1,27 +1,62 @@
 # TODO: Extend the documentation with the information about your service
 openapi: 3.0.0
 info:
-  title: Microservice Template
-  description: This microservice template is used to allow new developers to start with a new microservice fast
-               The template is written in Golang
-  version: '1.0'
+  title: WISdoM OSS - Water Usage Forecasting
+  description: This microservice allows the calculation of water usage forecasts
+  version: '2.0'
 
 servers:
-  - url: /
+  - url: /api/water-usage-forecasts/
     description: The default API endpoint for the WISdoM demo server
 
 paths:
-  /:
+  /{model}:
+    parameters:
+      - in: path
+        name: model
+        schema:
+          type: string
+          enum:
+            - linear
+            - polynomial
+            - logarithmic
+        required: true
+      - in: query
+        name: key
+        schema:
+          type: array
+          items:
+            type: string
+        required: true
+        description: The keys of the area keys to be used for the forecast
+      - in: query
+        name: consumerGroup
+        schema:
+          type: array
+          items:
+            type: string
+        required: false
+        description: The url keys of the consumer group(s) to be used for the forecast
     get:
-      summary: Get a test message
-      description: Hello World
-      responses:
-        200:
-          description: Hello World
-  /ping:
-    get:
-      summary: Ping the service to test its reachability
-      description: The microservice will respond with a 204 No Content when pinging it
-      responses:
-        '204':
-          description: Response to the ping without any content
+        summary: Get the water usage forecast for the given model
+        description: Get the water usage forecast for the given model
+        operationId: getWaterUsageForecast
+        responses:
+            '200':
+              description: The water usage forecast
+              content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/WaterUsageForecast'
+            '400':
+              description: Bad request
+              content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/ErrorResponse'
+            '500':
+              description: Internal server error
+              content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/ErrorResponse'
