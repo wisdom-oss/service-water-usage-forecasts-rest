@@ -18,6 +18,12 @@
     "title": "Internal Application Error",
     "description": "An unexpected error occurred during the handling of the request.",
     "httpCode": 500
-  }
+  },
   // and this line. you may extend below this line
+  {
+    "code": "INVALID_FORECAST_MODEL",
+    "title": "Invalid Forecast Model",
+    "description": "The forecast model you provided is not supported.",
+    "httpCode": 400
+  }
 ]
