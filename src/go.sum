@@ -44,8 +44,8 @@ github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
 github.com/titanous/json5 v1.0.0 h1:hJf8Su1d9NuI/ffpxgxQfxh/UiBFZX7bMPid0rIL/7s=
 github.com/titanous/json5 v1.0.0/go.mod h1:7JH1M8/LHKc6cyP5o5g3CSaRj+mBrIimTxzpvmckH8c=
-github.com/wisdom-oss/microservice-middlewares v0.0.0-20230306155325-704a61ed44db h1:LBUL/QAjXbCZ87yfgUJK21MON/Kt1mcOmQa3q/0aOzc=
-github.com/wisdom-oss/microservice-middlewares v0.0.0-20230306155325-704a61ed44db/go.mod h1:AhmO0OoQbqNkZTxnuDHQFTOW/ERMEdVfDH8adq3ZrUE=
+github.com/wisdom-oss/microservice-middlewares v1.0.0 h1:GMKAHwFgP5wLoJnGwL7tWU4ymOLivWddCcrZBJR/GNw=
+github.com/wisdom-oss/microservice-middlewares v1.0.0/go.mod h1:6dSlBtHFMXOcK1IlufiN61CMdAWf26MmnxrgfbRkS1g=
 github.com/wisdom-oss/microservice-utils v1.0.0 h1:zPgMTv9o01FKYsaclugUdSKFepTMJyJ93SPcRpElNWg=
 github.com/wisdom-oss/microservice-utils v1.0.0/go.mod h1:f+UsuRlxA0WpbM+gjVbqSYieYyIKzoe/HK+lwyF/W1Y=
 golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

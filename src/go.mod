@@ -12,7 +12,7 @@ require (
 	github.com/rs/zerolog v1.29.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/titanous/json5 v1.0.0
-	github.com/wisdom-oss/microservice-middlewares v0.0.0-20230306155325-704a61ed44db
+	github.com/wisdom-oss/microservice-middlewares v1.0.0
 	github.com/wisdom-oss/microservice-utils v1.0.0
 
 )
