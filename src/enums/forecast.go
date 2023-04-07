@@ -3,7 +3,7 @@ package enums
 type ForecastModel string
 
 const (
-	LINEAR      ForecastModel = "linear"
-	EXPONENTIAL ForecastModel = "exponential"
-	POLYNOMIAL  ForecastModel = "polynomial"
+	LINEAR_FORECAST      ForecastModel = "linear"
+	EXPONENTIAL_FORECAST ForecastModel = "exponential"
+	POLYNOMIAL_FORECAST  ForecastModel = "polynomial"
 )
