@@ -1,29 +1,81 @@
-# WISdoM OSS - Golang Microservice Template
-![GitHub go.mod Go version (subdirectory of monorepo)](https://img.shields.io/github/go-mod/go-version/wisdom-oss/microservice-template?filename=src%2Fgo.mod&style=for-the-badge)
+# WISdoM OSS - Water Usage REST Adapter
+<p align="center">
+<img src="https://img.shields.io/github/go-mod/go-version/wisdom-oss/service-water-usage-forecasts-rest?filename=src%2Fgo.mod&style=for-the-badge" 
+alt="Go Lang Version"/>
+<a href="openapi.yaml">
+<img src="https://img.shields.io/badge/Schema%20Version-3.0.0-6BA539?style=for-the-badge&logo=OpenAPI%20Initiative" alt="Open
+API Schema Version"/></a>
+</p>
 
+## Overview
+This microservice is responsible for starting water usage forecasts.
+It is a part of the WISdoM OSS project.
+It uses the microservice template for the WISdoM OSS project.
 
-This repository contains the source code for a new microservice. You may use this source code
-for creating a new microservice which automatically registers at the api gateway and sets up
-a route on the gateway if needed.
+## Using the service
+The service is included in every WISdoM OSS deployment by default and does not
+require the user to do anything.
 
-**DO NOT FORK THIS REPOSITORY SINCE THE COMMIT HISTORY WILL BE TRANSFERRED INTO THE NEW REPOSITORY**
+A documentation for the API can be found in the [openapi.yaml](openapi.yaml) 
+file in the repository.
 
-## Development Steps
-0. Install Golang on your development machine if not already installed
-1. Download the repository as archive to your development machine
-2. Create a new empty repository for your new service
-3. Decompress the downloaded archive into the empty repository
-4. You may now make your initial commit in the repository
-5. Look for all TODOs in the files and act according to the TODOs
-6. Enjoy writing your own microservice
+## Request Flow
+The following diagram shows the request flow of the service.
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant G as API Gateway
+    participant S as Water Usage Forecast Adapter
+    participant D as Database
+    participant B as AMQP Message Broker
+    participant C as Calculation Module
 
-## Configuration
+    U->>G: New Request
+    activate G
+    G->>G: Check authentication
+    alt authentication failed
+        note over U,G: Authentication may fail due to<br/>invalid credentials or missing<br/>headers
+        G->>U: Error Response
+    else authentication successful
+        G->>S: Proxy request
+        activate S
+    end
+    S-->S: Check authentication information for explicit group
+    critical Validate incoming request 
+        activate D
+        S-->D: Query the supplied municipal keys
+        S-->D: Query the supplied consumer groups
+        deactivate D
+    end
+    activate B
+    S-)B: Publish Request for Forecast
+    B-->>S: Confirm Publish Event
+    loop Wait for response 
+        S->>B: Poll for response
+    end
+    B-)C: Deliver Message
+    activate C
+    C-->>B: Confirm delivery
+    C->C: Calculate Forecast
+    C-)B: Publish Result
+    B-->>C: Confirm Publish Event
+    deactivate C
+    B-)S: Deliver Respons
+    S-->>B: Confirm delivery
+    deactivate B
+    S-->>G: Deliver response
+    deactivate S
+    G-->>U: Deliver response
+    deactivate G
+```
 
-The microservice template is configurable via the following environment variables:
-- `CONFIG_LOGGING_LEVEL` &#8594; Set the logging verbosity [optional, default `INFO`]
-- `CONFIG_API_GATEWAY_HOST` &#8594; Set the host on which the API Gateway runs on **[required]**
-- `CONFIG_API_GATEWAY_ADMIN_PORT` &#8594; Set the port on which the API Gateway listens on **[required]**
-- `CONFIG_API_GATEWAY_SERVICE_PATH` &#8594; Set the path under which the service shall be reachable. _Do not prepend the path with `/api`. Only set the last part of the desired path_ **[required]**
-- `CONFIG_HTTP_LISTEN_PORT` &#8594; The port on which the built-in webserver will listen on [optional, default `8000`]
-- `CONFIG_SCOPE_FILE_PATH` &#8594; The location where the scope definition file is stored [optional, default `/microservice/res/scope.json]
+## Development
+### Prerequisites
+- Go 1.20
 
+### Important notices
+- Since the service is usually deployed behind an API gateway which
+  authenticates the user, the service does reject all requests which do not
+  contain the `X-Authenticated-Groups` and `X-Authenticated-User` header.
+
+  You need to set those headers manually when testing the service locally.
