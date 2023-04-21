@@ -9,6 +9,27 @@ servers:
   - url: /api/water-usage-forecasts/
     description: The default API endpoint for the WISdoM demo server
 
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        httpCode:
+          type: integer
+          title: HTTP Status Code
+        httpError:
+          type: string
+          title: HTTP Error
+        error:
+          type: string
+          title: Error Code
+        errorName:
+          type: string
+          title: Error Title
+        errorDescription:
+          type: string
+          title: Error Description
+
 paths:
   /{model}:
     parameters:
