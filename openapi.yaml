@@ -29,6 +29,71 @@ components:
         errorDescription:
           type: string
           title: Error Description
+    WaterUsageForecast:
+      type: object
+      properties:
+        forecast:
+          type: object
+          properties:
+            model:
+              type: string
+              title: Model
+            equation:
+              type: string
+              title: Equation
+            score:
+              type: number
+              title: Score
+            usages:
+              type: object
+              properties:
+                start:
+                  type: integer
+                  title: Start
+                end:
+                  type: integer
+                  title: End
+                amounts:
+                  type: array
+                  items:
+                    type: number
+                  title: Amounts
+
+        reference_usages:
+          type: object
+          properties:
+            start:
+              type: integer
+              title: Start
+            end:
+              type: integer
+              title: End
+            amounts:
+              type: array
+              items:
+                type: number
+              title: Amounts
+        municipal:
+          type: object
+          properties:
+            key:
+              type: string
+              title: Key
+            name:
+              type: string
+              title: Name
+            nutsKey:
+              type: string
+              title: Nuts Key
+        consumerGroup:
+          type: object
+          properties:
+            key:
+              type: string
+              title: Key
+            name:
+              type: string
+              title: Name
 
 paths:
   /{model}:
@@ -68,7 +133,9 @@ paths:
               content:
                   application/json:
                     schema:
-                      $ref: '#/components/schemas/WaterUsageForecast'
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/WaterUsageForecast'
             '400':
               description: Bad request
               content:
