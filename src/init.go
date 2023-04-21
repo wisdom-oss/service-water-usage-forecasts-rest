@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/gchaincl/dotsql"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog/pkgerrors"
@@ -212,6 +213,40 @@ func init() {
 		l.Fatal().Err(err).Msg("error during database pings")
 	}
 	l.Info().Msg("database connection established")
+}
+
+// connect to the message broker
+func init() {
+	l := log.With().Str("initStep", "connect-rabbitmq").Logger()
+	l.Info().Msg("pinging the message broker")
+	reachable := wisdomUtils.PingHost(globals.Environment["AMQP_HOST"], globals.Environment["AMQP_PORT"], 5)
+	if !reachable {
+		l.Fatal().Msg("unable to ping the message broker")
+	}
+	dsn := fmt.Sprintf("amqp://%s:%s@%s:%s/%%2F", globals.Environment["AMQP_USER"], globals.Environment["AMQP_PASS"],
+		globals.Environment["AMQP_HOST"], globals.Environment["AMQP_PORT"])
+
+	l.Info().Msg("opening connection to the message broker")
+	var err error
+	connections.AMQP.Connection, err = amqp.Dial(dsn)
+	if err != nil {
+		l.Fatal().Err(err).Msg("error during message broker connection")
+	}
+
+	l.Info().Msg("message broker connection established")
+	l.Info().Msg("opening channel to the message broker")
+	connections.AMQP.Channel, err = connections.AMQP.Connection.Channel()
+	if err != nil {
+		l.Fatal().Err(err).Msg("error during message broker channel creation")
+	}
+	l.Info().Msg("message broker channel established")
+
+	l.Info().Msg("creating callback queue")
+	connections.AMQP.CallbackQueue, err = connections.AMQP.Channel.QueueDeclare("", false, true, true, false, nil)
+	if err != nil {
+		l.Fatal().Err(err).Msg("error during callback queue creation")
+	}
+	l.Info().Str("name", connections.AMQP.CallbackQueue.Name).Msg("callback queue successfully created")
 }
 
 // initialization: load sql queries

@@ -8,6 +8,7 @@ require (
 	github.com/go-chi/httplog v0.2.5
 	github.com/lib/pq v1.10.7
 	github.com/pkg/errors v0.9.1
+	github.com/rabbitmq/amqp091-go v1.8.0
 	github.com/redis/go-redis/v9 v9.0.2
 	github.com/rs/zerolog v1.29.0
 	github.com/sirupsen/logrus v1.9.0
