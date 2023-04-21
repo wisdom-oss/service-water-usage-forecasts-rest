@@ -1,15 +1,19 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"microservice/enums"
 	requestErrors "microservice/request/error"
 	"microservice/structs"
 	"microservice/vars/globals"
 	"microservice/vars/globals/connections"
 	"net/http"
+	"time"
 )
 
 // l is an alias for shorter code
@@ -173,6 +177,39 @@ func NewForecast(w http.ResponseWriter, r *http.Request) {
 		e, _ := requestErrors.WrapInternalError(marshalError)
 		requestErrors.SendError(e, w)
 		return
+	}
+
+	// create a new context containing a timeout of 180 seconds
+	amqpCtx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
+	defer cancel()
+
+	correlationId := middleware.GetReqID(r.Context())
+
+	err := connections.AMQP.Channel.PublishWithContext(amqpCtx,
+		globals.Environment["AMQP_EXCHANGE"], globals.Environment["CALCULATION_MODULE_ROUTING_KEY"], false, false,
+		amqp.Publishing{
+			ContentType:   "application/json",
+			Body:          message,
+			CorrelationId: correlationId,
+			ReplyTo:       connections.AMQP.CallbackQueue.Name,
+		})
+	if err != nil {
+		l.Error().Err(err).Msg("an error occurred while publishing the message")
+		e, _ := requestErrors.WrapInternalError(err)
+		requestErrors.SendError(e, w)
+		return
+	} else {
+		l.Info().Msg("message published successfully")
+	}
+
+	for r := range connections.AMQP.Messages {
+		if correlationId == r.CorrelationId {
+			l.Info().Msg("received response from calculation module")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(r.Body)
+			return
+		}
 	}
 
 }

@@ -12,6 +12,7 @@ type AMQP struct {
 	Connection    *amqp.Connection
 	Channel       *amqp.Channel
 	CallbackQueue amqp.Queue
+	Messages      <-chan amqp.Delivery
 }
 
 type CalculationRequest struct {

@@ -17,6 +17,7 @@ import (
 	"microservice/vars/globals/connections"
 	"os"
 	"strings"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -228,7 +229,12 @@ func init() {
 
 	l.Info().Msg("opening connection to the message broker")
 	var err error
-	connections.AMQP.Connection, err = amqp.Dial(dsn)
+	connections.AMQP.Connection, err = amqp.DialConfig(dsn, amqp.Config{
+		Heartbeat: 30 * time.Second,
+		Properties: map[string]interface{}{
+			"connection_name": "water-usage-forecast-rest",
+		},
+	})
 	if err != nil {
 		l.Fatal().Err(err).Msg("error during message broker connection")
 	}
@@ -247,6 +253,9 @@ func init() {
 		l.Fatal().Err(err).Msg("error during callback queue creation")
 	}
 	l.Info().Str("name", connections.AMQP.CallbackQueue.Name).Msg("callback queue successfully created")
+	connections.AMQP.Messages, err = connections.AMQP.Channel.Consume(connections.AMQP.CallbackQueue.Name, "", true, true, false,
+		false, nil)
+
 }
 
 // initialization: load sql queries
