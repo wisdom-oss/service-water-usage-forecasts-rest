@@ -48,7 +48,7 @@ func WrapInternalError(err error) (*structs.ErrorResponse, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create internal error")
 	}
-	response.ErrorDescription += fmt.Sprintf("%s", err)
+	response.ErrorDescription += fmt.Sprintf("%s", err.Error())
 	return response, nil
 }
 
