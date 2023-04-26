@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lib/pq"
@@ -179,12 +180,12 @@ func NewForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// create a new context containing a timeout of 180 seconds
-	amqpCtx, cancel := context.WithTimeout(r.Context(), 180*time.Second)
+	// create a new context containing a timeout of 240 seconds
+	amqpCtx, cancel := context.WithTimeout(r.Context(), 240*time.Second)
 	defer cancel()
 
 	correlationId := middleware.GetReqID(r.Context())
-
+	var timeMessagePublished time.Time
 	err := connections.AMQP.Channel.PublishWithContext(amqpCtx,
 		globals.Environment["AMQP_EXCHANGE"], globals.Environment["CALCULATION_MODULE_ROUTING_KEY"], false, false,
 		amqp.Publishing{
@@ -200,15 +201,41 @@ func NewForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		l.Info().Msg("message published successfully")
+		l.Info().Msg("waiting for the modules response")
+		timeMessagePublished = time.Now()
+	}
+	ch := make(chan []byte)
+	go getAMQPResponse(ch, correlationId)
+
+	for {
+		select {
+		case <-amqpCtx.Done():
+			l.Error().Msg("timed out while waiting for the modules response")
+			e, err := requestErrors.GetRequestError("CALCULATION_MODULE_SLOW")
+			if err != nil {
+				l.Error().Err(err).Msg("an error occurred while getting the request error")
+				e, _ = requestErrors.WrapInternalError(err)
+			}
+			requestErrors.SendError(e, w)
+			return
+		case forecast := <-ch:
+			elapsedTime := time.Since(timeMessagePublished)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Calculation-Time", fmt.Sprintf("%f", elapsedTime.Seconds()))
+			w.Write(forecast)
+			return
+		}
 	}
 
-	for r := range connections.AMQP.Messages {
-		if correlationId == r.CorrelationId {
-			l.Info().Msg("received response from calculation module")
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(r.Body)
-			return
+}
+
+func getAMQPResponse(ch chan []byte, correlationId string) {
+	for {
+		for r := range connections.AMQP.Messages {
+			if correlationId == r.CorrelationId {
+				ch <- r.Body
+				return
+			}
 		}
 	}
 

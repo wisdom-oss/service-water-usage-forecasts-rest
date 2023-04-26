@@ -43,5 +43,11 @@
     "title": "Invalid Consumer Groups",
     "description": "The request contains invalid area keys",
     "httpCode": 400
+  },
+  {
+    "code": "CALCULATION_MODULE_SLOW",
+    "title": "Calculation Module Slow",
+    "description": "The calculation module did not respond in the expected time of 300 seconds. You may try again later.",
+    "httpCode": 504
   }
 ]
