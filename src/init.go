@@ -112,7 +112,12 @@ func init() {
 					"the environment variable '%s' is required but not set and no file present", key)
 			} else {
 				l.Debug().Str("env", key).Msg("found value for environment variable in docker secret")
-				globals.Environment[key] = value
+				// read the file
+				fileContent, err := os.ReadFile(value)
+				if err != nil {
+					l.Fatal().Err(err).Msgf("unable to read file '%s'", value)
+				}
+				globals.Environment[key] = string(fileContent)
 			}
 
 		} else {
