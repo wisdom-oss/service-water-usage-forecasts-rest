@@ -3,7 +3,7 @@ microservice. Furthermore, a default value may be set for the environment
 variable if it is optional. */
 {
   "required": [
-    "API_GATEWAY_HOST", "PG_HOST", "PG_USER", "PG_PASS", "SERVICE_PATH", "AMQP_HOST", "AMQP_PORT", "AMQP_USER", "AMQP_PASS",
+    "PG_HOST", "PG_USER", "PG_PASS", "AMQP_HOST", "AMQP_USER", "AMQP_PASS",
     "AMQP_EXCHANGE","CALCULATION_MODULE_ROUTING_KEY"
   ],
   "optional": [
@@ -16,8 +16,8 @@ variable if it is optional. */
       "default": "5432"
     },
     {
-      "key": "API_GATEWAY_PORT",
-      "default": "8001"
+      "key": "AMQP_PORT",
+      "default": "5672"
     },
     {
       "key": "SCOPE_FILE_LOCATION",
