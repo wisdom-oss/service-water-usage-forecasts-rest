@@ -1,0 +1,6 @@
+[submodule "WISdoM Middleware"]
+	path = src/request/middleware
+	url = https://github.com/wisdom-oss/microservice-middlewares.git
+[submodule "WISdoM Utilities"]
+	path = src/utils
+	url = https://github.com/wisdom-oss/microservice-utils.git

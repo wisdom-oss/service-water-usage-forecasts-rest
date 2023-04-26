@@ -1,0 +1,150 @@
+# TODO: Extend the documentation with the information about your service
+openapi: 3.0.0
+info:
+  title: WISdoM OSS - Water Usage Forecasting
+  description: This microservice allows the calculation of water usage forecasts
+  version: '2.0'
+
+servers:
+  - url: /api/water-usage-forecasts/
+    description: The default API endpoint for the WISdoM demo server
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        httpCode:
+          type: integer
+          title: HTTP Status Code
+        httpError:
+          type: string
+          title: HTTP Error
+        error:
+          type: string
+          title: Error Code
+        errorName:
+          type: string
+          title: Error Title
+        errorDescription:
+          type: string
+          title: Error Description
+    WaterUsageForecast:
+      type: object
+      properties:
+        forecast:
+          type: object
+          properties:
+            model:
+              type: string
+              title: Model
+            equation:
+              type: string
+              title: Equation
+            score:
+              type: number
+              title: Score
+            usages:
+              type: object
+              properties:
+                start:
+                  type: integer
+                  title: Start
+                end:
+                  type: integer
+                  title: End
+                amounts:
+                  type: array
+                  items:
+                    type: number
+                  title: Amounts
+
+        reference_usages:
+          type: object
+          properties:
+            start:
+              type: integer
+              title: Start
+            end:
+              type: integer
+              title: End
+            amounts:
+              type: array
+              items:
+                type: number
+              title: Amounts
+        municipal:
+          type: object
+          properties:
+            key:
+              type: string
+              title: Key
+            name:
+              type: string
+              title: Name
+            nutsKey:
+              type: string
+              title: Nuts Key
+        consumerGroup:
+          type: object
+          properties:
+            key:
+              type: string
+              title: Key
+            name:
+              type: string
+              title: Name
+
+paths:
+  /{model}:
+    parameters:
+      - in: path
+        name: model
+        schema:
+          type: string
+          enum:
+            - linear
+            - polynomial
+            - logarithmic
+        required: true
+      - in: query
+        name: key
+        schema:
+          type: array
+          items:
+            type: string
+        required: true
+        description: The keys of the area keys to be used for the forecast
+      - in: query
+        name: consumerGroup
+        schema:
+          type: array
+          items:
+            type: string
+        required: false
+        description: The url keys of the consumer group(s) to be used for the forecast
+    get:
+        summary: Get the water usage forecast for the given model
+        description: Get the water usage forecast for the given model
+        operationId: getWaterUsageForecast
+        responses:
+            '200':
+              description: The water usage forecast
+              content:
+                  application/json:
+                    schema:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/WaterUsageForecast'
+            '400':
+              description: Bad request
+              content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/ErrorResponse'
+            '500':
+              description: Internal server error
+              content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/ErrorResponse'
