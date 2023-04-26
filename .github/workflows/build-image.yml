@@ -17,7 +17,7 @@ env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
-  IMAGE_NAME: wisdom/services/usage-forecasts-rest
+  IMAGE_NAME: wisdom-oss/usage-forecasts-rest
 
 
 jobs:
