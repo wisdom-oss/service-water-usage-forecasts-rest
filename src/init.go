@@ -117,7 +117,7 @@ func init() {
 				if err != nil {
 					l.Fatal().Err(err).Msgf("unable to read file '%s'", value)
 				}
-				globals.Environment[key] = string(fileContent)
+				globals.Environment[key] = strings.TrimSpace(string(fileContent))
 			}
 
 		} else {
