@@ -26,7 +26,7 @@ func NewForecast(w http.ResponseWriter, r *http.Request) {
 	// get the model from the url
 	m := chi.URLParam(r, "model")
 	model := enums.ForecastModel(m)
-	if model != enums.LINEAR_FORECAST && model != enums.EXPONENTIAL_FORECAST && model != enums.POLYNOMIAL_FORECAST {
+	if model != enums.LINEAR_FORECAST && model != enums.LOGARITHMIC_FORECAST && model != enums.POLYNOMIAL_FORECAST {
 		l.Warn().Msg("invalid model requested. rejecting request")
 		e, err := requestErrors.GetRequestError("INVALID_FORECAST_MODEL")
 		if err != nil {

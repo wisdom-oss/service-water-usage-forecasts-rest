@@ -4,6 +4,6 @@ type ForecastModel string
 
 const (
 	LINEAR_FORECAST      ForecastModel = "linear"
-	EXPONENTIAL_FORECAST ForecastModel = "exponential"
+	LOGARITHMIC_FORECAST ForecastModel = "logarithmic"
 	POLYNOMIAL_FORECAST  ForecastModel = "polynomial"
 )
