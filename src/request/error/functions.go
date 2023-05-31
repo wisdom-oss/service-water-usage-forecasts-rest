@@ -43,12 +43,12 @@ func GetRequestError(errorCode string) (*structs.ErrorResponse, error) {
 }
 
 // WrapInternalError wraps an internal error and adds the error to the response
-func WrapInternalError(err error) (*structs.ErrorResponse, error) {
+func WrapInternalError(extErr error) (*structs.ErrorResponse, error) {
 	response, err := GetRequestError("INTERNAL_ERROR")
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create internal error")
 	}
-	response.ErrorDescription += fmt.Sprintf("%s", err.Error())
+	response.ErrorDescription += fmt.Sprintf("%s", extErr.Error())
 	return response, nil
 }
 
