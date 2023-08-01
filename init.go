@@ -4,9 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	amqp "github.com/rabbitmq/amqp091-go"
 	wisdomType "github.com/wisdom-oss/commonTypes"
+	"microservice/wrapper"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/qustavo/dotsql"
 	"github.com/rs/zerolog"
@@ -182,6 +185,42 @@ func init() {
 	if err != nil {
 		l.Fatal().Err(err).Msg("unable to load queries used by the service")
 	}
+}
+
+// this init function establishes a connection to the message broker and opens
+// up a channel used to later open up queues
+func init() {
+	l.Info().Msg("preparing amqp connection")
+	// now build the amqp uri
+	uri := fmt.Sprintf(`amqp://%s:%s@%s:%s/%%2F`,
+		globals.Environment["AMQP_USER"], globals.Environment["AMQP_PASS"],
+		globals.Environment["AMQP_HOST"], globals.Environment["AMQP_PORT"])
+	l.Info().Msg("opening connection to the message broker")
+	// now open up the connection
+	conn, err := amqp.DialConfig(uri, amqp.Config{
+		Heartbeat: 30 * time.Second,
+		Properties: map[string]interface{}{
+			"connection_name": "usage-forecasts-rest",
+		},
+	})
+	if err != nil {
+		l.Fatal().Err(err).Msg("unable to connect to the message broker")
+	}
+
+	// since the message broker connection was successfully opened, now open
+	// a channel used for further communication with the message broker
+	channel, err := conn.Channel()
+	if err != nil {
+		l.Fatal().Err(err).Msg("unable to open channel to the message broker")
+	}
+
+	// now assign the properties to the global amqp object
+	globals.Amqp = wrapper.AMQP{
+		Connection: conn,
+		Channel:    channel,
+	}
+
+	l.Info().Msg("connected to the message broker")
 }
 
 // this function just logs that the init process is finished
