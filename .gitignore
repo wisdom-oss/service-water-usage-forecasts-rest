@@ -21,3 +21,5 @@
 !globals/
 !routes/
 !wrapper/
+!types/
+!enums/
