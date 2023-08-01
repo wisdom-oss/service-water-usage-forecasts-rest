@@ -1,8 +1,32 @@
 [
   {
-    "code": "TEMPLATE",
-    "title": "Template Error",
-    "description": "This is a template error, if you see this this means the error handling in the template works",
+    "code": "INVALID_FORECAST_MODEL",
+    "title": "Invalid Forecast Model",
+    "description": "The forecast model you provided is not supported.",
     "httpCode": 400
+  },
+  {
+    "code": "NO_AREA_KEYS",
+    "title": "Missing Area Keys",
+    "description": "The request is missing the area keys in the query parameters",
+    "httpCode": 400
+  },
+  {
+    "code": "INVALID_AREA_KEYS",
+    "title": "Invalid Area Keys",
+    "description": "The request contains invalid area keys",
+    "httpCode": 400
+  },
+  {
+    "code": "INVALID_CONSUMER_GROUPS",
+    "title": "Invalid Consumer Groups",
+    "description": "The request contains invalid area keys",
+    "httpCode": 400
+  },
+  {
+    "code": "CALCULATION_MODULE_SLOW",
+    "title": "Calculation Module Slow",
+    "description": "The calculation module did not respond in the expected time of 300 seconds. You may try again later.",
+    "httpCode": 504
   }
 ]

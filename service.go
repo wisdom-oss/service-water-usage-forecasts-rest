@@ -34,9 +34,7 @@ func main() {
 	// now add the authorization middleware to the router
 	router.Use(wisdomMiddleware.Authorization(globals.AuthorizationConfiguration, globals.ServiceName))
 	// now mount the admin router
-	router.HandleFunc("/", routes.BasicHandler)
-	router.HandleFunc("/internal-error", routes.BasicWithInternalErrorHandling)
-	router.HandleFunc("/wisdom-error", routes.BasicWithWISdoMErrorHandling)
+	router.HandleFunc("/{model}", routes.NewForecast)
 
 	// now boot up the service
 	// Configure the HTTP server

@@ -1,10 +1,11 @@
 {
-  "required": ["PG_HOST", "PG_USER", "PG_PASS"],
+  "required": ["PG_HOST", "PG_USER", "PG_PASS", "AMQP_HOST", "AMQP_USER", "AMQP_PASS", "AMQP_EXCHANGE", "CALCULATION_MODULE_ROUTING_KEY"],
   "optional": {
     "LISTEN_PORT": "8000",
     "PG_PORT": "5432",
     "AUTH_CONFIG_FILE_LOCATION": "./authConfig.json",
     "ERROR_FILE_LOCATION": "./errors.json5",
-    "QUERY_FILE_LOCATION": "./queries.sql"
+    "QUERY_FILE_LOCATION": "./queries.sql",
+    "AMQP_PORT": "5672"
   }
 }
