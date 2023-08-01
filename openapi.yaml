@@ -124,27 +124,27 @@ paths:
         required: false
         description: The url keys of the consumer group(s) to be used for the forecast
     get:
-        summary: Get the water usage forecast for the given model
-        description: Get the water usage forecast for the given model
-        operationId: getWaterUsageForecast
-        responses:
-            '200':
-              description: The water usage forecast
-              content:
-                  application/json:
-                    schema:
-                      type: array
-                      items:
-                        $ref: '#/components/schemas/WaterUsageForecast'
-            '400':
-              description: Bad request
-              content:
-                  application/json:
-                    schema:
-                      $ref: '#/components/schemas/ErrorResponse'
-            '500':
-              description: Internal server error
-              content:
-                  application/json:
-                    schema:
-                      $ref: '#/components/schemas/ErrorResponse'
+      summary: Get the water usage forecast for the given model
+      description: Get the water usage forecast for the given model
+      operationId: getWaterUsageForecast
+      responses:
+        '200':
+          description: The water usage forecast
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WaterUsageForecast'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

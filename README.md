@@ -16,7 +16,7 @@ It uses the microservice template for the WISdoM OSS project.
 The service is included in every WISdoM OSS deployment by default and does not
 require the user to do anything.
 
-A documentation for the API can be found in the [openapi.yaml](openapi.yaml) 
+A documentation for the API can be found in the [openapi.yaml](openapi.yaml)
 file in the repository.
 
 ## Request Flow
@@ -60,7 +60,7 @@ sequenceDiagram
     C-)B: Publish Result
     B-->>C: Confirm Publish Event
     deactivate C
-    B-)S: Deliver Respons
+    B-)S: Deliver Response
     S-->>B: Confirm delivery
     deactivate B
     S-->>G: Deliver response
