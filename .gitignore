@@ -7,6 +7,7 @@
 # now allow all documenttion files
 !README.md
 !openapi.yaml
+!Dockerfile
 
 # now allow all files in the resources directory
 !resources
