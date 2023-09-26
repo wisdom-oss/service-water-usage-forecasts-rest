@@ -8,6 +8,6 @@ RUN go build -o /build/out/service -x
 
 FROM alpine:latest AS runlevel
 COPY --from=build /build/out/service /service
-COPY res /res
+COPY resources /res
 WORKDIR /
 ENTRYPOINT ["/service"]
